@@ -17,6 +17,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+import type { ClassValue } from 'clsx';
+
+const cn = (...inputs: ClassValue[]) => {
+  return twMerge(clsx(inputs));
+};
 
 interface DraggableChartProps {
   id: string;
@@ -29,9 +36,13 @@ interface DraggableChartProps {
   activeKPIs: Set<string>;
   kpiColors: Record<string, { color: string; name: string; icon: any }>;
   globalDateRange: DateRange | undefined;
+  theme?: {
+    name: string;
+    colors: string[];
+  };
 }
 
-export function DraggableChart({
+const DraggableChart = ({
   id,
   data,
   type,
@@ -42,7 +53,8 @@ export function DraggableChart({
   activeKPIs,
   kpiColors,
   globalDateRange,
-}: DraggableChartProps) {
+  theme,
+}: DraggableChartProps) => {
   const [chartType, setChartType] = useState<ChartType>(type);
   const [localActiveKPIs, setLocalActiveKPIs] = useState<Set<string>>(activeKPIs);
   const [localDateRange, setLocalDateRange] = useState<DateRange | undefined>(undefined);
@@ -51,6 +63,7 @@ export function DraggableChart({
   const [isTransitioning, setIsTransitioning] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const transitionTimeoutRef = useRef<NodeJS.Timeout>();
 
   const {
     attributes,
@@ -125,8 +138,29 @@ export function DraggableChart({
   const toggleFullscreen = () => {
     setIsTransitioning(true);
     setIsFullscreen(!isFullscreen);
-    setTimeout(() => setIsTransitioning(false), 300);
+    
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+    }
+
+    transitionTimeoutRef.current = setTimeout(() => {
+      setIsTransitioning(false);
+      if (chartRef.current) {
+        const chart = chartRef.current.querySelector('.echarts-for-react');
+        if (chart) {
+          (chart as any).getEchartsInstance()?.resize();
+        }
+      }
+    }, 300);
   };
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const effectiveDateRange = useGlobalDate ? globalDateRange : localDateRange;
 
@@ -135,7 +169,11 @@ export function DraggableChart({
       <div
         ref={setNodeRef}
         style={style}
-        className={`${className} relative group touch-none`}
+        className={cn(
+          className,
+          "relative group touch-none",
+          isFullscreen && "fixed inset-0 z-50"
+        )}
       >
         <AnimatePresence>
           {isFullscreen && (
@@ -144,7 +182,7 @@ export function DraggableChart({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-background/80 backdrop-blur-md z-40"
               onClick={toggleFullscreen}
             />
           )}
@@ -154,30 +192,25 @@ export function DraggableChart({
           ref={cardRef}
           layout
           transition={{
-            layout: { duration: 0.3 },
-            opacity: { duration: 0.2 }
+            layout: { duration: 0.3, ease: "easeInOut" }
           }}
-          className={`${
-            isFullscreen 
-              ? 'fixed inset-4 z-50' 
-              : 'relative w-full h-full'
-          }`}
+          className={cn(
+            "relative w-full h-full transition-all duration-300",
+            isFullscreen && "fixed inset-4 z-50"
+          )}
         >
           <Card 
-            className={`w-full h-full overflow-hidden bg-card/90 backdrop-blur-sm border-border/40 shadow-xl hover:shadow-2xl transition-all duration-300 ${
-              isFullscreen 
-                ? 'rounded-xl flex flex-col' 
-                : ''
-            }`}
+            className={cn(
+              "w-full h-full overflow-hidden bg-card/90 backdrop-blur-sm border-border/40 shadow-xl hover:shadow-2xl transition-all duration-300",
+              isFullscreen && "rounded-xl flex flex-col"
+            )}
           >
-            {/* Loading Overlay */}
             {isTransitioning && (
               <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-50 flex items-center justify-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
               </div>
             )}
 
-            {/* Chart Header */}
             <div className="absolute top-0 left-0 right-0 h-16 bg-card/95 backdrop-blur-sm border-b border-border/40 px-5 flex items-center justify-between z-30">
               <div className="flex items-center gap-4">
                 {!isFullscreen && (
@@ -259,7 +292,6 @@ export function DraggableChart({
               </div>
             )}
 
-            {/* Parameters Toggle */}
             <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm rounded-xl p-2.5 shadow-xl border border-border/40">
               {Object.entries(kpiColors).map(([kpiId, kpi]) => {
                 const Icon = kpi.icon;
@@ -284,15 +316,14 @@ export function DraggableChart({
               })}
             </div>
 
-            {/* Chart Container */}
             <motion.div 
               ref={chartRef} 
               layout
-              className={`${!useGlobalDate ? 'pt-28' : 'pt-16'} h-full ${
-                isFullscreen 
-                  ? 'flex-1 flex items-center justify-center'
-                  : ''
-              }`}
+              className={cn(
+                "h-full",
+                !useGlobalDate ? 'pt-28' : 'pt-16',
+                isFullscreen && "flex items-center justify-center"
+              )}
             >
               <ChartContainer
                 data={data}
@@ -301,7 +332,11 @@ export function DraggableChart({
                 activeKPIs={localActiveKPIs}
                 kpiColors={kpiColors}
                 dateRange={effectiveDateRange}
-                className={`p-6 ${isFullscreen ? 'h-[calc(100vh-12rem)]' : ''}`}
+                theme={theme}
+                className={cn(
+                  "p-6",
+                  isFullscreen ? "h-[calc(100vh-10rem)]" : "h-full"
+                )}
               />
             </motion.div>
           </Card>
@@ -309,4 +344,8 @@ export function DraggableChart({
       </div>
     </>
   );
-}
+};
+
+export default DraggableChart;
+
+export { DraggableChart }

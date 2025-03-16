@@ -17,6 +17,10 @@ interface ChartContainerProps {
   dateRange?: DateRange;
   className?: string;
   options?: echarts.EChartsOption;
+  theme?: {
+    name: string;
+    colors: string[];
+  };
 }
 
 const ChartContainer = memo(({
@@ -27,13 +31,15 @@ const ChartContainer = memo(({
   kpiColors,
   dateRange,
   className,
-  options: externalOptions
+  options: externalOptions,
+  theme
 }: ChartContainerProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectedTool, setSelectedTool] = useState<'box' | 'lasso' | null>(null);
   const [mounted, setMounted] = useState(false);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   const filteredData = React.useMemo(() => {
     if (!dateRange?.from || !dateRange?.to) return data;
@@ -45,6 +51,46 @@ const ChartContainer = memo(({
       return itemDate.isAfter(fromDate) && itemDate.isBefore(toDate);
     });
   }, [data, dateRange]);
+
+  const initChart = useCallback(() => {
+    if (!chartRef.current) return;
+
+    if (chartInstance.current) {
+      chartInstance.current.dispose();
+    }
+
+    chartInstance.current = echarts.init(chartRef.current);
+    setMounted(true);
+
+    // Set up resize observer
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+    }
+
+    resizeObserverRef.current = new ResizeObserver(entries => {
+      if (chartInstance.current) {
+        requestAnimationFrame(() => {
+          chartInstance.current?.resize();
+        });
+      }
+    });
+
+    resizeObserverRef.current.observe(chartRef.current);
+  }, []);
+
+  useEffect(() => {
+    initChart();
+
+    return () => {
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
+      if (chartInstance.current) {
+        chartInstance.current.dispose();
+        chartInstance.current = null;
+      }
+    };
+  }, [initChart]);
 
   const updateChart = useCallback(() => {
     if (!chartInstance.current) return;
@@ -89,30 +135,6 @@ const ChartContainer = memo(({
           return html;
         }
       },
-      toolbox: {
-        show: false
-      },
-      dataZoom: [
-        {
-          type: 'inside',
-          start: 0,
-          end: 100
-        },
-        {
-          show: true,
-          type: 'slider',
-          bottom: 60,
-          start: 0,
-          end: 100,
-          borderColor: 'transparent',
-          backgroundColor: 'rgba(200,200,200,0.2)',
-          fillerColor: 'rgba(144,197,237,0.2)',
-          textStyle: {
-            fontSize: 11
-          },
-          height: 20
-        }
-      ],
       grid: {
         left: '3%',
         right: '4%',
@@ -142,80 +164,71 @@ const ChartContainer = memo(({
             })
         }
       },
-      series: categories.map(category => {
-        const kpiId = category.toLowerCase();
-        const color = kpiColors[kpiId]?.color;
-        
-        return {
-          name: category,
-          type,
-          data: dates.map(date => {
-            const point = filteredData.find(item => item.date === date && item.category === category);
-            return point ? point.value : null;
-          }),
-          smooth: true,
-          symbolSize: 6,
-          itemStyle: {
-            color
+      dataZoom: [
+        {
+          type: 'inside',
+          start: 0,
+          end: 100
+        },
+        {
+          show: true,
+          type: 'slider',
+          bottom: 60,
+          start: 0,
+          end: 100,
+          borderColor: 'transparent',
+          backgroundColor: 'rgba(200,200,200,0.2)',
+          fillerColor: 'rgba(144,197,237,0.2)',
+          textStyle: {
+            fontSize: 11
           },
-          ...(type === 'line' && {
-            areaStyle: {
-              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                { offset: 0, color: color + '40' },
-                { offset: 1, color: color + '00' }
-              ])
-            }
-          })
-        };
-      })
+          height: 20
+        }
+      ],
+      color: theme?.colors || undefined,
+      series: categories.map((category, index) => ({
+        name: category,
+        type,
+        data: dates.map(date => {
+          const point = filteredData.find(item => item.date === date && item.category === category);
+          return point ? point.value : null;
+        }),
+        smooth: true,
+        symbolSize: 6,
+        itemStyle: {
+          color: theme?.colors?.[index % theme.colors.length]
+        },
+        ...(type === 'line' && {
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { 
+                offset: 0, 
+                color: theme?.colors?.[index % theme.colors.length] + '40' || kpiColors[category.toLowerCase()]?.color + '40'
+              },
+              { 
+                offset: 1, 
+                color: theme?.colors?.[index % theme.colors.length] + '00' || kpiColors[category.toLowerCase()]?.color + '00'
+              }
+            ])
+          }
+        })
+      }))
     };
 
     requestAnimationFrame(() => {
       chartInstance.current?.setOption(options, { notMerge: true });
     });
-  }, [filteredData, type, activeKPIs, kpiColors, title]);
+  }, [filteredData, type, activeKPIs, kpiColors, title, theme]);
 
-  // Initialize chart when component mounts
-  useEffect(() => {
-    if (!chartRef.current) return;
-
-    // Initialize chart
-    chartInstance.current = echarts.init(chartRef.current);
-    setMounted(true);
-
-    return () => {
-      if (chartInstance.current) {
-        chartInstance.current.dispose();
-        chartInstance.current = null;
-      }
-    };
-  }, []);
-
-  // Update chart when data changes or after initialization
   useEffect(() => {
     if (!mounted || !chartInstance.current) return;
     
-    requestAnimationFrame(() => {
-      if (externalOptions) {
-        chartInstance.current?.setOption(externalOptions, { notMerge: true });
-      } else {
-        updateChart();
-      }
-    });
+    if (externalOptions) {
+      chartInstance.current?.setOption(externalOptions, { notMerge: true });
+    } else {
+      updateChart();
+    }
   }, [mounted, updateChart, externalOptions]);
-
-  // Handle resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (!chartInstance.current) return;
-      requestAnimationFrame(() => {
-        chartInstance.current?.resize();
-      });
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const handleZoomIn = useCallback(() => {
     if (!chartInstance.current) return;
@@ -367,4 +380,4 @@ const ChartContainer = memo(({
 
 ChartContainer.displayName = 'ChartContainer';
 
-export default ChartContainer;
+export default ChartContainer;  

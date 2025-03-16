@@ -1,10 +1,19 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, ZoomIn, ZoomOut, Square, Lasso, Trash2, FileJson, FileSpreadsheet, File as FilePdf, Image } from 'lucide-react';
+import { Download, ZoomIn, ZoomOut, Square, Lasso, Trash2, FileJson, FileSpreadsheet, File as FilePdf, Image, Settings2 } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import { jsPDF } from 'jspdf';
 import type { ECharts } from 'echarts';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from '@/lib/utils';
 
 interface ChartToolbarProps {
   chartInstance: ECharts | null;
@@ -27,19 +36,13 @@ export function ChartToolbar({
   data,
   title
 }: ChartToolbarProps) {
-  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [showTools, setShowTools] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        menuRef.current &&
-        buttonRef.current &&
-        !menuRef.current.contains(event.target as Node) &&
-        !buttonRef.current.contains(event.target as Node)
-      ) {
-        setShowDownloadMenu(false);
+      if (toolbarRef.current && !toolbarRef.current.contains(event.target as Node)) {
+        setShowTools(false);
       }
     }
 
@@ -92,94 +95,129 @@ export function ChartToolbar({
         break;
       }
     }
-    setShowDownloadMenu(false);
   };
 
   return (
-    <div className="absolute top-2 right-2 z-30 flex items-center gap-2">
-      <div className="flex items-center gap-1 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
-        <button
-          onClick={onZoomIn}
-          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-l-lg transition-colors"
-          title="Zoom In"
+    <div ref={toolbarRef} className="absolute top-2 right-2 z-30 flex items-center gap-2">
+      <div className="flex items-center">
+        <motion.div
+          className="flex items-center bg-background/95 backdrop-blur-sm rounded-lg shadow-lg border border-border"
+          initial={false}
+          animate={{
+            width: showTools ? 'auto' : '2rem',
+            paddingRight: showTools ? '0.375rem' : '0',
+          }}
+          transition={{
+            duration: 0.2,
+            ease: "easeInOut"
+          }}
         >
-          <ZoomIn className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-        <button
-          onClick={onZoomOut}
-          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 border-l border-r border-slate-200 dark:border-slate-700 transition-colors"
-          title="Zoom Out"
-        >
-          <ZoomOut className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-        <button
-          onClick={onBoxSelect}
-          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 border-r border-slate-200 dark:border-slate-700 transition-colors"
-          title="Box Selection"
-        >
-          <Square className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-        <button
-          onClick={onLassoSelect}
-          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 border-r border-slate-200 dark:border-slate-700 transition-colors"
-          title="Lasso Selection"
-        >
-          <Lasso className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-        <button
-          onClick={onClearSelection}
-          className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-          title="Clear Selection"
-        >
-          <Trash2 className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-      </div>
-
-      <div className="relative">
-        <button
-          ref={buttonRef}
-          onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-          className="p-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-          title="Download"
-        >
-          <Download className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-        </button>
-
-        {showDownloadMenu && (
-          <div
-            ref={menuRef}
-            className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50"
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-8 w-8 rounded-lg transition-colors",
+              showTools && "rounded-r-none border-r border-border"
+            )}
+            onClick={() => setShowTools(!showTools)}
           >
-            <button
-              onClick={() => handleDownload('png')}
-              className="flex items-center w-full px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+            <Settings2 className="h-4 w-4" />
+          </Button>
+
+          <AnimatePresence>
+            {showTools && (
+              <motion.div
+                className="flex items-center gap-1 px-1"
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onZoomIn}
+                  title="Zoom In"
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onZoomOut}
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+
+                <div className="w-[1px] h-8 bg-border mx-1" />
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onBoxSelect}
+                  title="Box Selection"
+                >
+                  <Square className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onLassoSelect}
+                  title="Lasso Selection"
+                >
+                  <Lasso className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onClearSelection}
+                  title="Clear Selection"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 ml-2 bg-background/95 backdrop-blur-sm hover:bg-accent/80"
             >
-              <Image className="w-4 h-4 mr-2" />
-              Download PNG
-            </button>
-            <button
-              onClick={() => handleDownload('pdf')}
-              className="flex items-center w-full px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-            >
-              <FilePdf className="w-4 h-4 mr-2" />
-              Download PDF
-            </button>
-            <button
-              onClick={() => handleDownload('csv')}
-              className="flex items-center w-full px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-            >
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-              Download CSV
-            </button>
-            <button
-              onClick={() => handleDownload('json')}
-              className="flex items-center w-full px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-            >
-              <FileJson className="w-4 h-4 mr-2" />
-              Download JSON
-            </button>
-          </div>
-        )}
+              <Download className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={() => handleDownload('png')}>
+              <Image className="h-4 w-4 mr-2" />
+              <span>Download PNG</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleDownload('pdf')}>
+              <FilePdf className="h-4 w-4 mr-2" />
+              <span>Download PDF</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleDownload('csv')}>
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              <span>Download CSV</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleDownload('json')}>
+              <FileJson className="h-4 w-4 mr-2" />
+              <span>Download JSON</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );

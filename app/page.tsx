@@ -12,9 +12,29 @@ import { DateRangePicker } from "@/components/date-range-picker"
 import { DateRange } from "react-day-picker"
 import { useSidebar } from "@/contexts/sidebar-context"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import { ChartConfig, ChartType, DataPoint, TemplateConfig, TemplateKey } from '@/types';
+
+const chartThemes = {
+  default: {
+    name: 'Default',
+    colors: ['#3B82F6', '#8B5CF6', '#EC4899', '#10B981']
+  },
+  ocean: {
+    name: 'Ocean',
+    colors: ['#0EA5E9', '#0D9488', '#0284C7', '#0369A1']
+  },
+  forest: {
+    name: 'Forest',
+    colors: ['#22C55E', '#15803D', '#84CC16', '#4D7C0F']
+  },
+  sunset: {
+    name: 'Sunset',
+    colors: ['#F97316', '#EA580C', '#DC2626', '#9F1239']
+  }
+};
 
 const kpiColors = {
   revenue: {
@@ -129,7 +149,7 @@ const generateChartConfigs = () => {
 
 export default function Dashboard() {
   const [mounted, setMounted] = useState(false);
-  const [charts, setCharts] = useState<ChartConfig[]>([]); // Add the type annotation here
+  const [charts, setCharts] = useState<ChartConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeKPIs, setActiveKPIs] = useState<Set<string>>(new Set(['revenue', 'users']));
   const [globalDateRange, setGlobalDateRange] = useState<DateRange | undefined>({
@@ -140,6 +160,7 @@ export default function Dashboard() {
   const { isExpanded } = useSidebar();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateKey>('default');
   const [resolution, setResolution] = useState('auto');
+  const [selectedTheme, setSelectedTheme] = useState('default');
 
   useEffect(() => {
     const initialize = async () => {
@@ -165,13 +186,11 @@ export default function Dashboard() {
   };
 
   const handleTemplateChange = (value: string) => {
-    // Type guard to ensure value is a valid TemplateKey
     if (isTemplateKey(value)) {
       setSelectedTemplate(value);
     }
   };
 
-  // Type guard function to check if value is a valid TemplateKey
   const isTemplateKey = (value: string): value is TemplateKey => {
     return Object.keys(templateData).includes(value);
   };
@@ -221,53 +240,53 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
 
-              <DateRangePicker
-                date={globalDateRange}
-                onDateChange={setGlobalDateRange}
-                className="w-[200px]"
-                showTime
-              />
-
-              <Select value={resolution} onValueChange={setResolution}>
-                <SelectTrigger className="w-[140px] h-9">
-                  <SelectValue placeholder="Resolution" />
+              <Select value={selectedTheme} onValueChange={setSelectedTheme}>
+                <SelectTrigger className="w-[180px] h-9">
+                  <SelectValue placeholder="Select theme" />
                 </SelectTrigger>
                 <SelectContent>
-                  {resolutionOptions.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
+                  {Object.entries(chartThemes).map(([key, theme]) => (
+                    <SelectItem key={key} value={key}>
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-0.5">
+                          {theme.colors.map((color, i) => (
+                            <div
+                              key={i}
+                              className="w-4 h-4 rounded-sm"
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
+                        <span className="ml-2">{theme.name}</span>
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+
+              <div className="flex items-center gap-4">
+                <DateRangePicker
+                  date={globalDateRange}
+                  onDateChange={setGlobalDateRange}
+                  className="w-[280px]"
+                  showTime
+                />
+
+                <Select value={resolution} onValueChange={setResolution}>
+                  <SelectTrigger className="w-[140px] h-9">
+                    <SelectValue placeholder="Resolution" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {resolutionOptions.map(option => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </motion.div>
           </div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="mb-8"
-          >
-            <Card className="p-4 backdrop-blur-sm bg-card/90 border border-border/40 shadow-xl">
-              <div className="flex items-center gap-2">
-                {Object.entries(kpiColors).map(([kpiId, kpi]) => (
-                  <button
-                    key={kpiId}
-                    onClick={() => toggleKPI(kpiId)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-300 text-sm ${
-                      activeKPIs.has(kpiId)
-                        ? `${kpi.lightBg} ${kpi.text} ${kpi.darkBg} ${kpi.darkText} shadow-lg hover:shadow-xl transform hover:-translate-y-0.5`
-                        : 'bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:shadow-md'
-                    }`}
-                  >
-                    <kpi.icon className="w-4 h-4" />
-                    <span className="font-medium">{kpi.name}</span>
-                  </button>
-                ))}
-              </div>
-            </Card>
-          </motion.div>
 
           <motion.div
             initial={{ opacity: 0 }}
@@ -280,6 +299,7 @@ export default function Dashboard() {
               activeKPIs={activeKPIs}
               kpiColors={kpiColors}
               globalDateRange={globalDateRange}
+              theme={chartThemes[selectedTheme as keyof typeof chartThemes]}
             />
           </motion.div>
         </div>
