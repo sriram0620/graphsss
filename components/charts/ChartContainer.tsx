@@ -103,15 +103,7 @@ const ChartContainer = memo(({
       animation: true,
       animationDuration: 300,
       animationEasing: 'cubicOut',
-      title: {
-        text: title,
-        left: 'center',
-        top: 20,
-        textStyle: {
-          fontSize: 16,
-          fontWeight: 500
-        }
-      },
+       
       tooltip: {
         trigger: 'axis',
         axisPointer: {
@@ -128,8 +120,8 @@ const ChartContainer = memo(({
             const color = kpiColors[kpiId]?.color || param.color;
             html += `
               <div style="color: ${color}">
-                <span style="display: inline-block; width: 10px; height: 10px; background: ${color}; border-radius: 50%; margin-right: 5px;"></span>
-                ${param.seriesName}: ${param.value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                <span style="display: inline-block; width: 10px; height: 10px; background: ${color};  margin-right: 5px;"></span>
+                ${param.seriesName}: ${param.value.toLocaleString('en-US', { style: 'currency', currency: 'INR' })}
               </div>`;
           });
           return html;

@@ -292,7 +292,7 @@ const DraggableChart = ({
               </div>
             )}
 
-            <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm rounded-xl p-2.5 shadow-xl border border-border/40">
+            <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm rounded-xl p-2.5">
               {Object.entries(kpiColors).map(([kpiId, kpi]) => {
                 const Icon = kpi.icon;
                 return (
@@ -301,7 +301,7 @@ const DraggableChart = ({
                     onClick={() => toggleKPI(kpiId)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${
                       localActiveKPIs.has(kpiId)
-                        ? 'bg-accent/70 text-accent-foreground shadow-lg hover:shadow-xl'
+                        ? 'bg-accent/70 text-accent-foreground hover:shadow-xl'
                         : 'text-muted-foreground hover:bg-accent/40 hover:shadow-md'
                     }`}
                     style={{

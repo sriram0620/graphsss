@@ -125,6 +125,17 @@
   border-color: rgba(255, 255, 255, 0.3);
 }
 
+/* Topology styles */
+.bg-dots-darker {
+  background-image: radial-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.bg-dots-lighter {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
 /* Chart animations */
 .chart-enter {
   opacity: 0;
