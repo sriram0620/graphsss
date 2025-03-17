@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { LayoutDashboard, FileText, Network, Settings, Users, HelpCircle, Sun, Moon, ChevronLeft } from "lucide-react"
+import { LayoutDashboard, FileText, Network, Bell, Settings, HelpCircle, Sun, Moon, ChevronLeft } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -13,7 +13,7 @@ const menuItems = [
   { id: 1, label: "Dashboard", icon: LayoutDashboard, link: "/" },
   { id: 2, label: "Templates", icon: FileText, link: "/templates" },
   { id: 3, label: "Topology", icon: Network, link: "/topology" },
-  { id: 4, label: "Users", icon: Users, link: "/users" },
+  { id: 4, label: "Alerts", icon: Bell, link: "/alerts" },
   { id: 5, label: "Settings", icon: Settings, link: "/settings" },
   { id: 6, label: "Help", icon: HelpCircle, link: "/help" },
 ]
