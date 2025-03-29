@@ -213,10 +213,52 @@
   height: 100%;
   width: 100%;
   transition: transform 0.2s ease;
+  --min-chart-height: 200px;
+  --base-font-size: clamp(9px, 1.5vw, 12px);
+  --chart-title-height: 2rem;
+  --chart-padding: 0.25rem;
 }
 
 .chart-wrapper:hover {
   transform: translateY(-2px);
+}
+
+.chart-wrapper .parameter-button {
+  font-size: var(--base-font-size);
+}
+
+.chart-wrapper .echarts-for-react {
+  font-size: var(--base-font-size);
+  height: calc(100% - var(--chart-title-height) - var(--chart-padding)) !important;
+}
+
+/* Optimize chart container spacing */
+.chart-wrapper {
+  .echarts-for-react {
+    height: calc(100% - 10px) !important; /* Adjust for toolbar */
+  }
+
+  /* Compact data zoom slider */
+  .echarts-datazoom {
+    height: 15px !important;
+  }
+
+  /* Optimize axis labels */
+  .echarts-axis-label {
+    font-size: 10px !important;
+    line-height: 1 !important;
+  }
+}
+
+/* Responsive text sizes for different chart sizes */
+@media (min-width: 768px) {
+  .chart-wrapper[style*="height: 400"] {
+    --base-font-size: clamp(10px, 1.8vw, 14px);
+  }
+  
+  .chart-wrapper[style*="height: 600"] {
+    --base-font-size: clamp(11px, 2vw, 16px);
+  }
 }
 
 /* Fullscreen mode styles */

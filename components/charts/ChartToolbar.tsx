@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, ZoomIn, ZoomOut, Square, Lasso, Trash2, FileJson, FileSpreadsheet, File as FilePdf, Image, Settings2 } from 'lucide-react';
+import { Download, ZoomIn, ZoomOut, Square, Lasso, Trash2, FileText, Image, Save } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import { jsPDF } from 'jspdf';
 import type { ECharts } from 'echarts';
@@ -51,49 +51,90 @@ export function ChartToolbar({
   }, []);
 
   const handleDownload = async (format: 'png' | 'svg' | 'pdf' | 'csv' | 'json') => {
-    if (!chartInstance) return;
+    if (!chartInstance) {
+      console.error('Chart instance is not available');
+      return;
+    }
 
-    switch (format) {
-      case 'png':
-      case 'svg': {
-        const url = chartInstance.getDataURL({
-          type: format,
-          pixelRatio: 2,
-          backgroundColor: '#fff'
-        });
-        saveAs(url, `chart-${title}.${format}`);
-        break;
+    try {
+      switch (format) {
+        case 'png': {
+          const url = chartInstance.getDataURL({
+            type: 'png',
+            pixelRatio: 2,
+            backgroundColor: '#ffffff'
+          });
+          const link = document.createElement('a');
+          link.download = `${title.toLowerCase().replace(/\s+/g, '-')}.png`;
+          link.href = url;
+          link.click();
+          break;
+        }
+        case 'pdf': {
+          const url = chartInstance.getDataURL({
+            type: 'png',
+            pixelRatio: 2,
+            backgroundColor: '#ffffff'
+          });
+
+          const pdf = new jsPDF({
+            orientation: 'landscape',
+            unit: 'px',
+            format: 'a4'
+          });
+
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          const imgWidth = chartInstance.getWidth();
+          const imgHeight = chartInstance.getHeight();
+          
+          // Calculate aspect ratio to fit the image properly
+          const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+          const width = imgWidth * ratio;
+          const height = imgHeight * ratio;
+          const x = (pdfWidth - width) / 2;
+          const y = (pdfHeight - height) / 2;
+
+          pdf.addImage(url, 'PNG', x, y, width, height);
+          pdf.save(`${title.toLowerCase().replace(/\s+/g, '-')}.pdf`);
+          break;
+        }
+        case 'csv': {
+          if (!data || !data.length) {
+            console.error('No data available for CSV export');
+            return;
+          }
+          
+          // Create CSV header
+          const headers = Object.keys(data[0]);
+          const csvContent = [
+            headers.join(','),
+            ...data.map(row => headers.map(header => {
+              const cell = row[header];
+              return typeof cell === 'string' && cell.includes(',') 
+                ? `"${cell}"` 
+                : cell;
+            }).join(','))
+          ].join('\n');
+
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          saveAs(blob, `${title.toLowerCase().replace(/\s+/g, '-')}.csv`);
+          break;
+        }
+        case 'json': {
+          if (!data) {
+            console.error('No data available for JSON export');
+            return;
+          }
+          const blob = new Blob([JSON.stringify(data, null, 2)], { 
+            type: 'application/json'
+          });
+          saveAs(blob, `${title.toLowerCase().replace(/\s+/g, '-')}.json`);
+          break;
+        }
       }
-      case 'pdf': {
-        const url = chartInstance.getDataURL({
-          type: 'png',
-          pixelRatio: 2,
-          backgroundColor: '#fff'
-        });
-        const pdf = new jsPDF({
-          orientation: 'landscape',
-          unit: 'px'
-        });
-        const imgProps = pdf.getImageProperties(url);
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        pdf.addImage(url, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`chart-${title}.pdf`);
-        break;
-      }
-      case 'csv': {
-        const csvContent = data.map(row => 
-          Object.values(row).join(',')
-        ).join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        saveAs(blob, `chart-${title}.csv`);
-        break;
-      }
-      case 'json': {
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        saveAs(blob, `chart-${title}.json`);
-        break;
-      }
+    } catch (error) {
+      console.error('Error downloading chart:', error);
     }
   };
 
@@ -121,7 +162,7 @@ export function ChartToolbar({
             )}
             onClick={() => setShowTools(!showTools)}
           >
-            <Settings2 className="h-4 w-4" />
+            <ZoomIn className="h-4 w-4" />
           </Button>
 
           <AnimatePresence>
@@ -184,41 +225,43 @@ export function ChartToolbar({
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={() => handleDownload('png')}>
+                      <Image className="h-4 w-4 mr-2" />
+                      <span>Download PNG</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDownload('pdf')}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      <span>Download PDF</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDownload('csv')}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      <span>Download CSV</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDownload('json')}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      <span>Download JSON</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </motion.div>
             )}
           </AnimatePresence>
         </motion.div>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 ml-2 bg-background/95 backdrop-blur-sm hover:bg-accent/80"
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => handleDownload('png')}>
-              <Image className="h-4 w-4 mr-2" />
-              <span>Download PNG</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDownload('pdf')}>
-              <FilePdf className="h-4 w-4 mr-2" />
-              <span>Download PDF</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDownload('csv')}>
-              <FileSpreadsheet className="h-4 w-4 mr-2" />
-              <span>Download CSV</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDownload('json')}>
-              <FileJson className="h-4 w-4 mr-2" />
-              <span>Download JSON</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </div>
   );
 }
+
+export { ChartToolbar };

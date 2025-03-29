@@ -1,29 +1,18 @@
-"use client"
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Card } from '@/components/ui/card';
-import { GripHorizontal, BarChart2, LineChart, Calendar, Maximize2, Minimize2 } from 'lucide-react';
+import { GripHorizontal, BarChart2, LineChart, Calendar, Maximize2, Minimize2, Settings2, ZoomIn, ZoomOut, Square, Lasso, Trash2, Download, Image, FilePdf, FileSpreadsheet, FileJson } from 'lucide-react';
 import ChartContainer from './ChartContainer';
 import { DataPoint, ChartType } from '@/types';
 import { DateRangePicker } from '@/components/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-import type { ClassValue } from 'clsx';
-
-const cn = (...inputs: ClassValue[]) => {
-  return twMerge(clsx(inputs));
-};
+import { cn } from '@/lib/utils';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { saveAs } from 'file-saver';
+import { jsPDF } from 'jspdf';
 
 interface DraggableChartProps {
   id: string;
@@ -42,26 +31,33 @@ interface DraggableChartProps {
   };
 }
 
-const DraggableChart = ({
+export const DraggableChart: React.FC<DraggableChartProps> = ({
   id,
   data,
   type,
   title,
   className,
-  width,
-  height,
   activeKPIs,
   kpiColors,
   globalDateRange,
   theme,
-}: DraggableChartProps) => {
+}) => {
   const [chartType, setChartType] = useState<ChartType>(type);
   const [localActiveKPIs, setLocalActiveKPIs] = useState<Set<string>>(activeKPIs);
   const [localDateRange, setLocalDateRange] = useState<DateRange | undefined>(undefined);
   const [useGlobalDate, setUseGlobalDate] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const chartRef = useRef<HTMLDivElement>(null);
+  const [showTools, setShowTools] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<{
+    zoomIn: () => void;
+    zoomOut: () => void;
+    boxSelect: () => void;
+    lassoSelect: () => void;
+    clearSelection: () => void;
+    download: (format: 'png' | 'svg' | 'pdf' | 'csv' | 'json') => void;
+  }>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const transitionTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -79,20 +75,22 @@ const DraggableChart = ({
   }, [activeKPIs]);
 
   useEffect(() => {
+    if (!containerRef.current) return;
+
     const handleResize = () => {
-      if (chartRef.current) {
-        const chart = chartRef.current.querySelector('.echarts-for-react');
-        if (chart) {
-          (chart as any).getEchartsInstance()?.resize();
-        }
+      const chart = chartRef.current;
+      if (chart) {
+        // Trigger chart resize after container resize
+        requestAnimationFrame(() => {
+          chart.resize?.();
+        });
       }
     };
 
-    if (chartRef.current) {
-      const resizeObserver = new ResizeObserver(handleResize);
-      resizeObserver.observe(chartRef.current);
-      return () => resizeObserver.disconnect();
-    }
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(containerRef.current);
+
+    return () => resizeObserver.disconnect();
   }, [isFullscreen]);
 
   useEffect(() => {
@@ -120,7 +118,8 @@ const DraggableChart = ({
     transition,
     opacity: isDragging ? 0.5 : 1,
     width: '100%',
-    height: '100%'
+    height: '100%',
+    zIndex: isFullscreen ? 50 : 'auto'
   };
 
   const toggleKPI = useCallback((kpiId: string) => {
@@ -154,15 +153,76 @@ const DraggableChart = ({
     }, 300);
   };
 
-  useEffect(() => {
-    return () => {
-      if (transitionTimeoutRef.current) {
-        clearTimeout(transitionTimeoutRef.current);
+  const effectiveDateRange = useGlobalDate ? globalDateRange : localDateRange;
+
+  const handleDownload = useCallback((format: 'png' | 'svg' | 'pdf' | 'csv' | 'json') => {
+    if (!chartRef.current) return;
+    
+    const chartInstance = (chartRef.current as any)?.getEchartsInstance?.();
+    if (!chartInstance) return;
+  
+    switch (format) {
+      case 'png': {
+        const url = chartInstance.getDataURL({
+          type: 'png',
+          pixelRatio: 2,
+          backgroundColor: '#fff'
+        });
+        saveAs(url, `chart-${title}.png`);
+        break;
       }
-    };
+      case 'pdf': {
+        const url = chartInstance.getDataURL({
+          type: 'png',
+          pixelRatio: 2,
+          backgroundColor: '#fff'
+        });
+        const pdf = new jsPDF({
+          orientation: 'landscape',
+          unit: 'px'
+        });
+        const imgProps = pdf.getImageProperties(url);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        pdf.addImage(url, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`chart-${title}.pdf`);
+        break;
+      }
+      case 'csv': {
+        const csvContent = data.map(row => 
+          Object.values(row).join(',')
+        ).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        saveAs(blob, `chart-${title}.csv`);
+        break;
+      }
+      case 'json': {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        saveAs(blob, `chart-${title}.json`);
+        break;
+      }
+    }
+  }, [data, title]);
+
+  const handleZoomIn = useCallback(() => {
+    chartRef.current?.zoomIn();
   }, []);
 
-  const effectiveDateRange = useGlobalDate ? globalDateRange : localDateRange;
+  const handleZoomOut = useCallback(() => {
+    chartRef.current?.zoomOut();
+  }, []);
+
+  const handleBoxSelect = useCallback(() => {
+    chartRef.current?.boxSelect();
+  }, []);
+
+  const handleLassoSelect = useCallback(() => {
+    chartRef.current?.lassoSelect();
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    chartRef.current?.clearSelection();
+  }, []);
 
   return (
     <>
@@ -189,7 +249,7 @@ const DraggableChart = ({
         </AnimatePresence>
 
         <motion.div
-          ref={cardRef}
+          ref={containerRef}
           layout
           transition={{
             layout: { duration: 0.3, ease: "easeInOut" }
@@ -211,77 +271,162 @@ const DraggableChart = ({
               </div>
             )}
 
-            <div className="absolute top-0 left-0 right-0 h-16 bg-card/95 backdrop-blur-sm border-b border-border/40 px-5 flex items-center justify-between z-30">
-              <div className="flex items-center gap-4">
-                {!isFullscreen && (
-                  <div 
-                    className="p-2.5 rounded-lg cursor-grab hover:bg-accent/40 transition-all duration-300"
-                    {...attributes}
-                    {...listeners}
-                  >
-                    <GripHorizontal className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                )}
-                <h3 className="text-sm font-medium text-foreground/90">{title}</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9"
-                        onClick={() => setUseGlobalDate(!useGlobalDate)}
-                      >
-                        <Calendar className={`h-4 w-4 ${useGlobalDate ? 'text-primary' : 'text-muted-foreground'}`} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{useGlobalDate ? 'Using global date range' : 'Using local date range'}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9"
-                  onClick={() => setChartType(prev => prev === 'line' ? 'bar' : 'line')}
-                >
-                  {chartType === 'line' ? (
-                    <BarChart2 className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <LineChart className="h-4 w-4 text-muted-foreground" />
+            <div className="absolute top-0 left-0 right-0 flex flex-col">
+              {/* Title Bar */}
+              <div className="h-8 bg-card/95 backdrop-blur-sm border-b border-border/40 px-2 flex items-center justify-between z-30">
+                <div className="flex items-center gap-1">
+                  {!isFullscreen && (
+                    <div 
+                      className="p-1 rounded-lg cursor-grab hover:bg-accent/40 transition-all duration-300"
+                      {...attributes}
+                      {...listeners}
+                    >
+                      <GripHorizontal className="w-3 h-3 text-muted-foreground" />
+                    </div>
                   )}
-                </Button>
+                  <h3 className="text-xs font-medium text-foreground/90 truncate max-w-[150px]">{title}</h3>
+                </div>
 
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setUseGlobalDate(!useGlobalDate)}
+                  >
+                    <Calendar className={`h-3 w-3 ${useGlobalDate ? 'text-primary' : 'text-muted-foreground'}`} />
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setChartType(prev => prev === 'line' ? 'bar' : 'line')}
+                  >
+                    {chartType === 'line' ? (
+                      <BarChart2 className="h-3 w-3 text-muted-foreground" />
+                    ) : (
+                      <LineChart className="h-3 w-3 text-muted-foreground" />
+                    )}
+                  </Button>
+
+                  {/* Tools Button with Dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-9 w-9"
-                        onClick={toggleFullscreen}
+                        className="h-6 w-6"
                       >
-                        {isFullscreen ? (
-                          <Minimize2 className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Maximize2 className="h-4 w-4 text-muted-foreground" />
-                        )}
+                        <Settings2 className="h-3 w-3 text-muted-foreground" />
                       </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{isFullscreen ? 'Exit fullscreen (Esc)' : 'Enter fullscreen'}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" side="bottom" className="w-auto">
+                      <div className="flex items-center gap-1 p-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={handleZoomIn}
+                          title="Zoom In"
+                        >
+                          <ZoomIn className="h-3.5 w-3.5" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={handleZoomOut}
+                          title="Zoom Out"
+                        >
+                          <ZoomOut className="h-3.5 w-3.5" />
+                        </Button>
+
+                        <div className="w-[1px] h-7 bg-border mx-0.5" />
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={handleBoxSelect}
+                          title="Box Selection"
+                        >
+                          <Square className="h-3.5 w-3.5" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={handleLassoSelect}
+                          title="Lasso Selection"
+                        >
+                          <Lasso className="h-3.5 w-3.5" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={handleClearSelection}
+                          title="Clear Selection"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Download Button */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                      >
+                        <Download className="h-3 w-3 text-muted-foreground" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem onClick={() => handleDownload('png')}>
+                        <Image className="h-4 w-4 mr-2" />
+                        <span>Download PNG</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDownload('pdf')}>
+                        <FilePdf className="h-4 w-4 mr-2" />
+                        <span>Download PDF</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDownload('csv')}>
+                        <FileSpreadsheet className="h-4 w-4 mr-2" />
+                        <span>Download CSV</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDownload('json')}>
+                        <FileJson className="h-4 w-4 mr-2" />
+                        <span>Download JSON</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={toggleFullscreen}
+                  >
+                    {isFullscreen ? (
+                      <Minimize2 className="h-3 w-3 text-muted-foreground" />
+                    ) : (
+                      <Maximize2 className="h-3 w-3 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
 
             {!useGlobalDate && (
-              <div className="absolute top-16 left-0 right-0 bg-muted/30 backdrop-blur-sm border-b border-border/40 p-3 z-20">
+              <div className="absolute top-8 left-0 right-0 bg-muted/30 backdrop-blur-sm border-b border-border/40 p-1 z-20">
                 <DateRangePicker
                   date={localDateRange}
                   onDateChange={setLocalDateRange}
@@ -292,28 +437,37 @@ const DraggableChart = ({
               </div>
             )}
 
-            <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 z-20 flex items-center gap-3 bg-card/95 backdrop-blur-sm rounded-xl p-2.5">
-              {Object.entries(kpiColors).map(([kpiId, kpi]) => {
-                const Icon = kpi.icon;
-                return (
-                  <button
-                    key={kpiId}
-                    onClick={() => toggleKPI(kpiId)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${
-                      localActiveKPIs.has(kpiId)
-                        ? 'bg-accent/70 text-accent-foreground hover:shadow-xl'
-                        : 'text-muted-foreground hover:bg-accent/40 hover:shadow-md'
-                    }`}
-                    style={{
-                      color: localActiveKPIs.has(kpiId) ? kpi.color : undefined
-                    }}
-                    title={`Toggle ${kpi.name}`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span className="text-xs font-medium">{kpi.name}</span>
-                  </button>
-                );
-              })}
+            <div className="absolute bottom-0 left-0 right-0 flex flex-col gap-1 pb-1">
+              {/* Range Selector */}
+              <div className="px-3">
+                {/* Your existing range selector component */}
+              </div>
+              
+              {/* KPI Parameters */}
+              <div className="flex items-center justify-center gap-1 px-3">
+                {Object.entries(kpiColors).map(([kpiId, kpi]) => {
+                  const Icon = kpi.icon;
+                  const parameterButtonClasses = `flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-all duration-300 text-[0.65em] md:text-[0.7em] lg:text-[0.75em] ${
+                    localActiveKPIs.has(kpiId)
+                      ? 'bg-accent/70 text-accent-foreground'
+                      : 'text-muted-foreground hover:bg-accent/40'
+                  }`;
+                  return (
+                    <button
+                      key={kpiId}
+                      onClick={() => toggleKPI(kpiId)}
+                      className={parameterButtonClasses}
+                      style={{
+                        color: localActiveKPIs.has(kpiId) ? kpi.color : undefined
+                      }}
+                      title={`Toggle ${kpi.name}`}
+                    >
+                      <Icon className="w-[1em] h-[1em]" />
+                      <span className="font-medium whitespace-nowrap">{kpi.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <motion.div 
@@ -321,11 +475,12 @@ const DraggableChart = ({
               layout
               className={cn(
                 "h-full",
-                !useGlobalDate ? 'pt-28' : 'pt-16',
+                !useGlobalDate ? 'pt-10' : 'pt-6', // Reduced padding-top
                 isFullscreen && "flex items-center justify-center"
               )}
             >
               <ChartContainer
+                ref={chartRef}
                 data={data}
                 type={chartType}
                 title={title}
@@ -334,7 +489,7 @@ const DraggableChart = ({
                 dateRange={effectiveDateRange}
                 theme={theme}
                 className={cn(
-                  "p-6",
+                  "p-0",
                   isFullscreen ? "h-[calc(100vh-10rem)]" : "h-full"
                 )}
               />
@@ -346,6 +501,6 @@ const DraggableChart = ({
   );
 };
 
-export default DraggableChart;
+DraggableChart.displayName = 'DraggableChart';
 
-export { DraggableChart }
+export default DraggableChart;

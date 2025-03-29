@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils"
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import { ChartConfig, ChartType, DataPoint, TemplateConfig, TemplateKey } from '@/types';
+import { DraggableChart } from '@/components/DraggableChart';
 
 const chartThemes = {
   default: {

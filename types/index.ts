@@ -21,11 +21,11 @@ export interface ChartConfig {
   height: number;
 }
 
+export type TemplateKey = 'default' | 'single' | 'dual' | 'triple' | 'quad' | 'five' | 'six' | 'seven' | 'eight';
+
 export interface TemplateConfig {
   id: string;
   name: string;
   description: string;
   charts: number[];
 }
-
-export type TemplateKey = 'default' | 'single' | 'dual' | 'triple' | 'quad' | 'five' | 'six' | 'seven' | 'eight';

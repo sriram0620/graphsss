@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { ThemeProvider } from "@/components/theme-provider"
 import { SidebarProvider } from '@/contexts/sidebar-context'
+import { cn } from '@/lib/utils'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -18,17 +19,21 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={cn(
+        "min-h-screen bg-background antialiased",
+        inter.className
+      )}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
-          storageKey="dashboard-theme"
         >
-          <SidebarProvider>
-            {children}
-          </SidebarProvider>
+          <div className="relative flex min-h-screen flex-col">
+            <SidebarProvider>
+              {children}
+            </SidebarProvider>
+          </div>
         </ThemeProvider>
       </body>
     </html>

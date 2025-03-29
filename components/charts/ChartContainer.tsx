@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, memo, useState, useCallback } from 'react';
+import React, { useEffect, useRef, memo, useState, useCallback, useImperativeHandle } from 'react';
 import * as echarts from 'echarts';
 import { ChartType, DataPoint } from '@/types';
 import { ChartToolbar } from './ChartToolbar';
@@ -23,17 +23,27 @@ interface ChartContainerProps {
   };
 }
 
-const ChartContainer = memo(({
-  data,
-  type,
-  title,
-  activeKPIs,
-  kpiColors,
-  dateRange,
-  className,
-  options: externalOptions,
-  theme
-}: ChartContainerProps) => {
+// Add React.forwardRef wrapper and define ref type
+const ChartContainer = memo(React.forwardRef<{
+  zoomIn: () => void;
+  zoomOut: () => void;
+  boxSelect: () => void;
+  lassoSelect: () => void;
+  clearSelection: () => void;
+  download: (format: 'png' | 'svg' | 'pdf' | 'csv' | 'json') => void;
+}, ChartContainerProps>((props, ref) => {
+  const {
+    data,
+    type,
+    title,
+    activeKPIs,
+    kpiColors,
+    dateRange,
+    className,
+    options: externalOptions,
+    theme
+  } = props;
+
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
@@ -103,7 +113,15 @@ const ChartContainer = memo(({
       animation: true,
       animationDuration: 300,
       animationEasing: 'cubicOut',
-       
+      
+      grid: {
+        top: 10,         // Reduced from 25 to minimize space below title
+        right: '3%',
+        bottom: 35,      // Reduced from 45
+        left: '3%',
+        containLabel: true
+      },
+
       tooltip: {
         trigger: 'axis',
         axisPointer: {
@@ -127,35 +145,55 @@ const ChartContainer = memo(({
           return html;
         }
       },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: 100,
-        top: 60,
-        containLabel: true
-      },
+
       xAxis: {
         type: 'category',
         boundaryGap: type === 'bar',
         data: dates,
         axisLabel: {
-          formatter: (value: string) => dayjs(value).format('MMM D HH:mm'),
-          interval: 'auto',
-          rotate: 30,
-          margin: 14
+          formatter: (value: string) => dayjs(value).format('HH:mm'),
+          interval: Math.ceil(dates.length / 8),
+          rotate: 0,
+          margin: 8,      // Reduced from 12
+          color: '#666',
+          fontSize: 10    // Reduced from 11
+        },
+        axisTick: {
+          alignWithLabel: true
+        },
+        axisLine: {
+          lineStyle: {
+            color: '#ddd'                        // Lighter axis line
+          }
         }
       },
+
       yAxis: {
         type: 'value',
         axisLabel: {
           formatter: (value: number) => 
-            value.toLocaleString('en-US', {
-              style: 'currency',
-              currency: 'USD',
-              minimumFractionDigits: 0
-            })
+            value >= 1000000 
+              ? `${(value / 1000000).toFixed(1)}M` 
+              : value >= 1000 
+                ? `${(value / 1000).toFixed(0)}K` 
+                : value.toString(),
+          color: '#666',
+          fontSize: 10,   // Reduced from 11
+          margin: 4       // Added smaller margin
+        },
+        splitLine: {
+          lineStyle: {
+            color: '#f0f0f0'                     // Lighter grid lines
+          }
+        },
+        axisLine: {
+          show: false                            // Hide y-axis line for cleaner look
+        },
+        axisTick: {
+          show: false                            // Hide y-axis ticks
         }
       },
+
       dataZoom: [
         {
           type: 'inside',
@@ -165,28 +203,45 @@ const ChartContainer = memo(({
         {
           show: true,
           type: 'slider',
-          bottom: 60,
-          start: 0,
-          end: 100,
+          bottom: 30,     // Adjusted position to be above parameters
+          height: 12,
           borderColor: 'transparent',
-          backgroundColor: 'rgba(200,200,200,0.2)',
-          fillerColor: 'rgba(144,197,237,0.2)',
-          textStyle: {
-            fontSize: 11
+          backgroundColor: 'rgba(200,200,200,0.15)',
+          fillerColor: 'rgba(144,197,237,0.1)',
+          handleStyle: {
+            color: '#fff',
+            shadowBlur: 2,
+            shadowColor: 'rgba(0,0,0,0.2)',
+            shadowOffsetX: 0,
+            shadowOffsetY: 1
           },
-          height: 20
+          textStyle: {
+            fontSize: '0.7em',  // Make font size relative
+            color: '#666',
+            margin: 2
+          },
+          moveHandleStyle: {
+            opacity: 0.3
+          }
         }
       ],
-      color: theme?.colors || undefined,
+
       series: categories.map((category, index) => ({
         name: category,
         type,
         data: dates.map(date => {
-          const point = filteredData.find(item => item.date === date && item.category === category);
+          const point = filteredData.find(item => 
+            item.date === date && item.category === category
+          );
           return point ? point.value : null;
         }),
         smooth: true,
-        symbolSize: 6,
+        symbolSize: 4,    // Reduced from 6
+        showSymbol: false,
+        emphasis: {
+          focus: 'series',
+          scale: 1.5      // Reduced from 2
+        },
         itemStyle: {
           color: theme?.colors?.[index % theme.colors.length]
         },
@@ -195,11 +250,13 @@ const ChartContainer = memo(({
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
               { 
                 offset: 0, 
-                color: theme?.colors?.[index % theme.colors.length] + '40' || kpiColors[category.toLowerCase()]?.color + '40'
+                color: theme?.colors?.[index % theme.colors.length] + '40' || 
+                       kpiColors[category.toLowerCase()]?.color + '40'
               },
               { 
                 offset: 1, 
-                color: theme?.colors?.[index % theme.colors.length] + '00' || kpiColors[category.toLowerCase()]?.color + '00'
+                color: theme?.colors?.[index % theme.colors.length] + '00' || 
+                       kpiColors[category.toLowerCase()]?.color + '00'
               }
             ])
           }
@@ -210,7 +267,7 @@ const ChartContainer = memo(({
     requestAnimationFrame(() => {
       chartInstance.current?.setOption(options, { notMerge: true });
     });
-  }, [filteredData, type, activeKPIs, kpiColors, title, theme]);
+  }, [filteredData, type, activeKPIs, kpiColors, theme]);
 
   useEffect(() => {
     if (!mounted || !chartInstance.current) return;
@@ -263,6 +320,36 @@ const ChartContainer = memo(({
       });
     });
   }, []);
+
+  const handleDownload = useCallback((format: 'png' | 'svg' | 'pdf' | 'csv' | 'json') => {
+    if (!chartInstance.current) return;
+
+    switch (format) {
+      case 'png': {
+        const url = chartInstance.current.getDataURL({
+          type: 'png',
+          pixelRatio: 2,
+          backgroundColor: '#fff'
+        });
+        const link = document.createElement('a');
+        link.download = `chart-${title}.png`;
+        link.href = url;
+        link.click();
+        break;
+      }
+      case 'json': {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `chart-${title}.json`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+        break;
+      }
+      // ... implement other formats similarly
+    }
+  }, [chartInstance, data, title]);
 
   const handleBoxSelect = useCallback(() => {
     if (!chartInstance.current) return;
@@ -353,23 +440,25 @@ const ChartContainer = memo(({
     });
   }, []);
 
+  // Expose functions to parent component
+  useImperativeHandle(ref, () => ({
+    zoomIn: handleZoomIn,
+    zoomOut: handleZoomOut,
+    boxSelect: handleBoxSelect,
+    lassoSelect: handleLassoSelect,
+    clearSelection: handleClearSelection,
+    download: handleDownload
+  }));
+
   return (
     <div className={`relative w-full h-full ${className || ''}`}>
-      <ChartToolbar
-        chartInstance={chartInstance.current}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onBoxSelect={handleBoxSelect}
-        onLassoSelect={handleLassoSelect}
-        onClearSelection={handleClearSelection}
-        data={filteredData}
-        title={title}
-      />
-      <div ref={chartRef} className="w-full h-full" />
+      <div ref={chartRef} className="w-full h-full pt-1" /> {/* Reduced padding-top from 2 to 1 */}
     </div>
   );
-});
+}));
 
+// Add display name
 ChartContainer.displayName = 'ChartContainer';
 
-export default ChartContainer;  
+// Change to default export
+export default ChartContainer;

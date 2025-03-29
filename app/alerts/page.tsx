@@ -1,11 +1,22 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DateRangePicker } from '@/components/date-range-picker';
+import { DateRange } from 'react-day-picker';
+import { useTheme } from 'next-themes';
+import * as echarts from 'echarts';
+import { Bell, Filter, X, Maximize2, Minimize2, ArrowUpDown, Download } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -13,14 +24,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { Bell, Filter, Columns, ChevronDown, Maximize2, Minimize2 } from "lucide-react"
-import Sidebar from "@/components/sidebar"
-import { DateRangePicker } from "@/components/date-range-picker"
-import { DateRange } from "react-day-picker"
-import * as echarts from 'echarts';
-import { useTheme } from "next-themes"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/table";
+import { saveAs } from 'file-saver';
+import Sidebar from '@/components/sidebar';
 
 const chartThemes = {
   default: {
@@ -41,40 +47,32 @@ const chartThemes = {
   }
 };
 
-interface AlertStats {
-  total: number;
-  critical1: number;
-  critical2: number;
-  critical3: number;
-}
-
 interface PieChartData {
   title: string;
   data: { name: string; value: number }[];
 }
 
-const PieChart = React.memo(({ data, selectedTheme, theme }: { 
+const PieChart: React.FC<{
   data: PieChartData;
   selectedTheme: string;
   theme?: string;
-}) => {
-  const chartRef = useRef<HTMLDivElement>(null);
-  const chartInstance = useRef<echarts.ECharts>();
+}> = ({ data, selectedTheme, theme }) => {
+  const chartRef = React.useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [chart, setChart] = useState<echarts.ECharts | null>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const initChart = useCallback(() => {
     if (!chartRef.current) return;
 
-    if (chartInstance.current) {
-      chartInstance.current.dispose();
-    }
-
-    const colors = chartThemes[selectedTheme as keyof typeof chartThemes].colors;
+    const newChart = echarts.init(chartRef.current, undefined, {
+      renderer: 'canvas',
+      devicePixelRatio: window.devicePixelRatio
+    });
     
-    chartInstance.current = echarts.init(chartRef.current, theme === 'dark' ? 'dark' : undefined);
-    const option: echarts.EChartsOption = {
-      backgroundColor: 'transparent',
+    const colors = chartThemes[selectedTheme as keyof typeof chartThemes].colors;
+
+    const options: echarts.EChartsOption = {
       tooltip: {
         trigger: 'item',
         formatter: '{b}: {c} ({d}%)',
@@ -84,23 +82,14 @@ const PieChart = React.memo(({ data, selectedTheme, theme }: {
           color: theme === 'dark' ? '#fff' : '#000'
         }
       },
-      legend: {
-        orient: 'vertical',
-        right: '5%',
-        top: 'center',
-        textStyle: {
-          color: theme === 'dark' ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0, 0, 0, 0.85)'
-        }
-      },
       series: [
         {
           name: data.title,
           type: 'pie',
-          radius: ['60%', '85%'],
+          radius: ['40%', '70%'],
           avoidLabelOverlap: false,
           itemStyle: {
-            borderRadius: 4,
-            borderColor: theme === 'dark' ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255, 255, 255, 0.5)',
+            borderColor: theme === 'dark' ? '#1e293b' : '#ffffff',
             borderWidth: 2
           },
           label: {
@@ -109,181 +98,285 @@ const PieChart = React.memo(({ data, selectedTheme, theme }: {
           emphasis: {
             label: {
               show: true,
-              fontSize: 14,
-              fontWeight: 'bold',
-              color: theme === 'dark' ? '#fff' : '#000'
-            },
-            itemStyle: {
-              shadowBlur: 10,
-              shadowOffsetX: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.5)'
+              fontSize: '14',
+              fontWeight: 'bold'
             }
           },
           labelLine: {
             show: false
           },
-          data: data.data.map((item, i) => ({
-            ...item,
-            itemStyle: { color: colors[i % colors.length] }
-          }))
+          data: data.data,
+          color: colors
         }
       ]
     };
 
-    chartInstance.current.setOption(option);
-  }, [data, theme, selectedTheme]);
+    newChart.setOption(options);
+    setChart(newChart);
+
+    return () => {
+      newChart.dispose();
+    };
+  }, [data, selectedTheme, theme]);
 
   useEffect(() => {
+    initChart();
+
     const handleResize = () => {
-      if (chartInstance.current) {
-        chartInstance.current.resize();
+      if (chart && chartRef.current) {
+        chart.resize();
       }
     };
 
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart?.dispose();
+    };
+  }, [initChart, chart]);
 
   const toggleFullscreen = () => {
-    setIsTransitioning(true);
     setIsFullscreen(!isFullscreen);
-    
-    setTimeout(() => {
-      setIsTransitioning(false);
-      if (chartInstance.current) {
-        chartInstance.current.resize();
+    requestAnimationFrame(() => {
+      if (chart) {
+        setTimeout(() => {
+          chart.resize();
+        }, 300);
       }
-    }, 300);
+    });
   };
 
   return (
-    <>
-      <AnimatePresence>
+    <div ref={containerRef} className="relative">
+      <Card 
+        className={`relative overflow-hidden transition-all duration-300 ${
+          isFullscreen 
+            ? 'fixed inset-4 z-50 flex flex-col' 
+            : 'h-[400px]'
+        }`}
+      >
         {isFullscreen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-background/80 backdrop-blur-md z-40"
+          <div 
+            className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40"
             onClick={toggleFullscreen}
           />
         )}
-      </AnimatePresence>
-
-      <motion.div
-        layout
-        transition={{
-          layout: { duration: 0.3, ease: "easeInOut" }
-        }}
-        className={cn(
-          "relative",
-          isFullscreen && "fixed inset-4 z-50"
-        )}
-      >
-        <Card className={cn(
-          "col-span-1 p-6 backdrop-blur-sm bg-card/90 border-border/40 shadow-xl transition-all duration-300 hover:shadow-2xl",
-          theme === 'dark' && "bg-slate-900/90 hover:bg-slate-900/95",
-          isFullscreen && "h-full rounded-xl flex flex-col"
-        )}>
-          {isTransitioning && (
-            <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-50 flex items-center justify-center rounded-xl">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-            </div>
-          )}
-          
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-              {data.title}
-            </h3>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 hover:bg-accent/40"
-                onClick={toggleFullscreen}
-              >
-                {isFullscreen ? (
-                  <Minimize2 className="h-4 w-4" />
-                ) : (
-                  <Maximize2 className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 hover:bg-accent/40"
-              >
-                <Filter className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          <div
-            ref={chartRef}
-            className={cn(
-              "w-full transition-all duration-300",
-              isFullscreen ? "h-[calc(100vh-10rem)]" : "h-[300px]"
+        <div className="absolute top-4 right-4 z-50">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={toggleFullscreen}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="h-4 w-4" />
+            ) : (
+              <Maximize2 className="h-4 w-4" />
             )}
-          />
-        </Card>
-      </motion.div>
-    </>
+          </Button>
+        </div>
+        <div className="absolute top-4 left-4 z-50">
+          <h3 className="font-semibold text-lg">{data.title}</h3>
+        </div>
+        <div 
+          ref={chartRef} 
+          className={`w-full transition-all duration-300 ${
+            isFullscreen ? 'h-[calc(100%-100px)]' : 'h-[300px]'
+          }`}
+        />
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 flex flex-wrap justify-center gap-3 bg-card/95 backdrop-blur-sm rounded-xl p-2.5 shadow-xl border border-border/40">
+          {data.data.map((item, index) => (
+            <div
+              key={item.name}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/20"
+            >
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{
+                  backgroundColor: chartThemes[selectedTheme as keyof typeof chartThemes].colors[index]
+                }}
+              />
+              <span className="text-sm font-medium">{item.name}</span>
+              <span className="text-sm text-muted-foreground">({item.value.toLocaleString()})</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
   );
-});
+};
 
-PieChart.displayName = 'PieChart';
+// Generate dummy alerts data with a seed to ensure consistent data between server and client
+const generateAlerts = (count: number) => {
+  const severities = ['Critical', 'Warning', 'Info'];
+  const statuses = ['Active', 'Cleared'];
+  const sources = ['System', 'Application', 'Network', 'Security'];
+  const areas = ['Frontend', 'Backend', 'Database', 'Infrastructure'];
+  
+  // Use a seeded random number generator
+  const seededRandom = (seed: number) => {
+    return () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+  };
 
-export default function AlertsPage() {
+  const random = seededRandom(42); // Use a fixed seed
+
+  return Array.from({ length: count }, (_, i) => ({
+    id: `ALT-${(i + 1).toString().padStart(4, '0')}`,
+    severity: severities[Math.floor(random() * severities.length)],
+    status: statuses[Math.floor(random() * statuses.length)],
+    source: sources[Math.floor(random() * sources.length)],
+    area: areas[Math.floor(random() * areas.length)],
+    message: `Alert message ${i + 1} - This is a sample alert description`,
+    timestamp: new Date(Date.now() - Math.floor(random() * 7 * 24 * 60 * 60 * 1000)).toISOString(),
+  }));
+};
+
+const AlertsPage = () => {
+  const { theme } = useTheme();
   const [selectedTheme, setSelectedTheme] = useState('default');
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
     to: new Date()
   });
-  const { theme } = useTheme();
 
-  const alertStats: AlertStats = {
-    total: 88017,
-    critical1: 88017,
-    critical2: 0,
-    critical3: 0
-  };
+  // Use useMemo to ensure consistent data between renders
+  const alerts = useMemo(() => generateAlerts(100), []);
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: 'asc' | 'desc';
+  } | null>(null);
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [filteredAlerts, setFilteredAlerts] = useState(alerts);
 
-  const pieChartsData: PieChartData[] = [
+  const pieChartsData: PieChartData[] = useMemo(() => [
     {
-      title: "Alerts by Severity",
+      title: 'Alerts by Severity',
       data: [
-        { name: "Critical", value: 88017 }
+        { name: 'Critical', value: 88017 },
+        { name: 'Warning', value: 45230 },
+        { name: 'Info', value: 32180 }
       ]
     },
     {
-      title: "Alerts by Status",
+      title: 'Alerts by Status',
       data: [
-        { name: "Active", value: 44008 },
-        { name: "Cleared", value: 44009 }
+        { name: 'Active', value: 88017 },
+        { name: 'Cleared', value: 77450 }
       ]
     },
     {
-      title: "Alerts by Asset",
+      title: 'Alerts by Asset',
       data: [
-        { name: "N/A", value: 86780 },
-        { name: "pulse-171221445600", value: 1237 }
+        { name: 'Servers', value: 86780 },
+        { name: 'Network', value: 45670 },
+        { name: 'Storage', value: 32450 }
       ]
     },
     {
-      title: "Alerts by Source",
+      title: 'Alerts by Source',
       data: [
-        { name: "Pulse", value: 86780 },
-        { name: "Alert Group", value: 1237 }
+        { name: 'System', value: 88017 },
+        { name: 'Application', value: 54320 },
+        { name: 'Security', value: 43210 }
       ]
     }
-  ];
+  ], []);
+
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const handleColumnFilter = (column: string, value: string) => {
+    setColumnFilters(prev => ({
+      ...prev,
+      [column]: value
+    }));
+  };
+
+  const clearColumnFilter = (column: string) => {
+    setColumnFilters(prev => {
+      const newFilters = { ...prev };
+      delete newFilters[column];
+      return newFilters;
+    });
+  };
+
+  useEffect(() => {
+    let result = [...alerts];
+
+    // Apply column filters
+    Object.entries(columnFilters).forEach(([column, value]) => {
+      if (value) {
+        result = result.filter(alert => 
+          alert[column as keyof typeof alert]
+            .toString()
+            .toLowerCase()
+            .includes(value.toLowerCase())
+        );
+      }
+    });
+
+    // Apply sorting
+    if (sortConfig) {
+      result.sort((a, b) => {
+        if (a[sortConfig.key as keyof typeof a] < b[sortConfig.key as keyof typeof b]) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (a[sortConfig.key as keyof typeof a] > b[sortConfig.key as keyof typeof b]) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    setFilteredAlerts(result);
+  }, [alerts, columnFilters, sortConfig]);
+
+  const renderColumnHeader = (column: string, label: string) => (
+    <div className="flex items-center space-x-2">
+      <Button
+        variant="ghost"
+        onClick={() => handleSort(column)}
+        className="hover:bg-transparent p-0"
+      >
+        {label}
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+      <div className="relative">
+        <Input
+          placeholder={`Filter ${label.toLowerCase()}...`}
+          value={columnFilters[column] || ''}
+          onChange={(e) => handleColumnFilter(column, e.target.value)}
+          className="h-8 w-[150px] text-sm"
+        />
+        {columnFilters[column] && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+            onClick={() => clearColumnFilter(column)}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-background via-background/98 to-background/95 overflow-hidden">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        <div className="container mx-auto px-8 py-6">
-          <div className="flex items-center justify-between mb-8">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -292,17 +385,17 @@ export default function AlertsPage() {
                 Alert Monitoring
               </h1>
               <p className="text-muted-foreground/90 text-lg mt-2">
-                Monitor and manage all system alerts
+                Monitor and manage system alerts
               </p>
             </motion.div>
 
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-4"
+              className="flex flex-col sm:flex-row items-center gap-4"
             >
               <Select value={selectedTheme} onValueChange={setSelectedTheme}>
-                <SelectTrigger className="w-[180px] bg-card/90 backdrop-blur-sm">
+                <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Select theme" />
                 </SelectTrigger>
                 <SelectContent>
@@ -331,19 +424,6 @@ export default function AlertsPage() {
                 className="w-[280px]"
                 align="end"
               />
-
-              <Button variant="outline" className="gap-2 bg-card/90 backdrop-blur-sm hover:bg-accent/40">
-                Clear Filters
-              </Button>
-
-              <Button variant="outline" className="gap-2 bg-card/90 backdrop-blur-sm hover:bg-accent/40">
-                Last 1 Hour
-              </Button>
-
-              <Button variant="outline" className="gap-2 bg-card/90 backdrop-blur-sm hover:bg-accent/40">
-                1 Selected
-                <ChevronDown className="h-4 w-4" />
-              </Button>
             </motion.div>
           </div>
 
@@ -351,72 +431,52 @@ export default function AlertsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="grid grid-cols-4 gap-6 mb-8"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
           >
-            <Card className={cn(
-              "p-6 backdrop-blur-sm bg-card/90 border-border/40 shadow-xl transition-all duration-300 hover:shadow-2xl hover:-translate-y-1",
-              theme === 'dark' && "bg-slate-900/90 hover:bg-slate-900/95"
-            )}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Alerts Count</p>
-                  <h2 className="text-3xl font-bold mt-2 bg-gradient-to-r from-blue-500 to-blue-600 bg-clip-text text-transparent">
-                    {alertStats.total}
-                  </h2>
+            <Card className="p-6 backdrop-blur-sm bg-card/90 border-border/40 shadow-xl">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-red-500/10">
+                  <Bell className="w-6 h-6 text-red-500" />
                 </div>
-                <div className="p-3 rounded-full bg-blue-500/10">
-                  <Bell className="h-8 w-8 text-blue-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Critical Alerts</p>
+                  <h3 className="text-2xl font-bold">35</h3>
                 </div>
               </div>
             </Card>
 
-            <Card className={cn(
-              "p-6 backdrop-blur-sm bg-card/90 border-border/40 shadow-xl transition-all duration-300 hover:shadow-2xl hover:-translate-y-1",
-              theme === 'dark' && "bg-slate-900/90 hover:bg-slate-900/95"
-            )}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Critical Alert count (Level-1)</p>
-                  <h2 className="text-3xl font-bold mt-2 bg-gradient-to-r from-yellow-500 to-yellow-600 bg-clip-text text-transparent">
-                    {alertStats.critical1}
-                  </h2>
+            <Card className="p-6 backdrop-blur-sm bg-card/90 border-border/40 shadow-xl">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-yellow-500/10">
+                  <Bell className="w-6 h-6 text-yellow-500" />
                 </div>
-                <div className="p-3 rounded-full bg-yellow-500/10">
-                  <Bell className="h-8 w-8 text-yellow-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Warning Alerts</p>
+                  <h3 className="text-2xl font-bold">45</h3>
                 </div>
               </div>
             </Card>
 
-            <Card className={cn(
-              "p-6 backdrop-blur-sm bg-card/90 border-border/40 shadow-xl transition-all duration-300 hover:shadow-2xl hover:-translate-y-1",
-              theme === 'dark' && "bg-slate-900/90 hover:bg-slate-900/95"
-            )}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Critical Alert count (Level-2)</p>
-                  <h2 className="text-3xl font-bold mt-2 bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent">
-                    {alertStats.critical2}
-                  </h2>
+            <Card className="p-6 backdrop-blur-sm bg-card/90 border-border/40 shadow-xl">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-blue-500/10">
+                  <Bell className="w-6 h-6 text-blue-500" />
                 </div>
-                <div className="p-3 rounded-full bg-orange-500/10">
-                  <Bell className="h-8 w-8 text-orange-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Info Alerts</p>
+                  <h3 className="text-2xl font-bold">20</h3>
                 </div>
               </div>
             </Card>
 
-            <Card className={cn(
-              "p-6 backdrop-blur-sm bg-card/90 border-border/40 shadow-xl transition-all duration-300 hover:shadow-2xl hover:-translate-y-1",
-              theme === 'dark' && "bg-slate-900/90 hover:bg-slate-900/95"
-            )}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Critical Alert count (Level-3)</p>
-                  <h2 className="text-3xl font-bold mt-2 bg-gradient-to-r from-red-500 to-red-600 bg-clip-text text-transparent">
-                    {alertStats.critical3}
-                  </h2>
+            <Card className="p-6 backdrop-blur-sm bg-card/90 border-border/40 shadow-xl">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-green-500/10">
+                  <Bell className="w-6 h-6 text-green-500" />
                 </div>
-                <div className="p-3 rounded-full bg-red-500/10">
-                  <Bell className="h-8 w-8 text-red-500" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Cleared Alerts</p>
+                  <h3 className="text-2xl font-bold">35</h3>
                 </div>
               </div>
             </Card>
@@ -426,7 +486,7 @@ export default function AlertsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="grid grid-cols-2 gap-6 mb-8"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
           >
             {pieChartsData.map((data, index) => (
               <PieChart 
@@ -443,57 +503,62 @@ export default function AlertsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <Card className={cn(
-              "backdrop-blur-sm bg-card/90 border-border/40 shadow-xl transition-all duration-300",
-              theme === 'dark' && "bg-slate-900/90"
-            )}>
+            <Card className="backdrop-blur-sm bg-card/90 border-border/40 shadow-xl">
               <div className="p-6 border-b border-border/40">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-                    Alerts List
-                  </h2>
-                  <div className="flex items-center gap-4">
-                    <Input
-                      placeholder="Filter through alerts..."
-                      className="w-[300px] bg-card/90 backdrop-blur-sm"
-                    />
-                    <Button variant="outline" className="gap-2 bg-card/90 backdrop-blur-sm hover:bg-accent/40">
-                      <Filter className="h-4 w-4" />
-                      Filter By
-                    </Button>
-                    <Button variant="outline" className="gap-2 bg-card/90 backdrop-blur-sm hover:bg-accent/40">
-                      <Columns className="h-4 w-4" />
-                      Columns
-                    </Button>
-                  </div>
+                  <h2 className="text-lg font-semibold">Alerts List</h2>
                 </div>
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-accent/5">
-                    <TableHead>Severity</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>KPI ID</TableHead>
-                    <TableHead>CFX Incident ID</TableHead>
-                    <TableHead>ITSM Incident ID</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Area</TableHead>
-                    <TableHead>Message</TableHead>
-                    <TableHead>Time</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                      No results
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{renderColumnHeader('severity', 'Severity')}</TableHead>
+                      <TableHead>{renderColumnHeader('status', 'Status')}</TableHead>
+                      <TableHead>{renderColumnHeader('source', 'Source')}</TableHead>
+                      <TableHead>{renderColumnHeader('area', 'Area')}</TableHead>
+                      <TableHead>{renderColumnHeader('message', 'Message')}</TableHead>
+                      <TableHead>{renderColumnHeader('timestamp', 'Time')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAlerts.map((alert) => (
+                      <TableRow key={alert.id}>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            alert.severity === 'Critical' 
+                              ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                              : alert.severity === 'Warning'
+                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                              : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                          }`}>
+                            {alert.severity}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            alert.status === 'Active'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                              : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'
+                          }`}>
+                            {alert.status}
+                          </span>
+                        </TableCell>
+                        <TableCell>{alert.source}</TableCell>
+                        <TableCell>{alert.area}</TableCell>
+                        <TableCell className="max-w-[500px] truncate">{alert.message}</TableCell>
+                        <TableCell>{new Date(alert.timestamp).toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </Card>
           </motion.div>
         </div>
       </main>
     </div>
   );
-}
+};
+
+export default AlertsPage;
