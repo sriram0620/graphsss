@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
-import { TemplateChart } from './TemplateChart';
+import { EnhancedTemplateChart } from './EnhancedTemplateChart';
 import { TemplateDetail, KPIInfo } from '@/lib/api';
 import { DateRange } from 'react-day-picker';
 import 'react-grid-layout/css/styles.css';
@@ -86,13 +86,14 @@ export function TemplateDynamicLayout({
         isDraggable={true}
         compactType="vertical"
         preventCollision={false}
+        transformScale={1}
       >
         {templateDetail.graphs.map(graph => (
           <div 
             key={graph.graph_id} 
             className="bg-card rounded-lg shadow-sm border border-border overflow-hidden"
           >
-            <TemplateChart
+            <EnhancedTemplateChart
               graphId={graph.graph_id}
               graphName={graph.graph_name}
               primaryKpiId={graph.primary_kpi_id}

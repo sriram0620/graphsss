@@ -3,7 +3,9 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { ThemeProvider } from "@/components/theme-provider"
 import { SidebarProvider } from '@/contexts/sidebar-context'
+import { ChartProvider } from '@/contexts/chart-context'
 import { cn } from '@/lib/utils'
+import { Toaster } from '@/components/ui/toaster'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -31,7 +33,10 @@ export default function RootLayout({
         >
           <div className="relative flex min-h-screen flex-col">
             <SidebarProvider>
-              {children}
+              <ChartProvider>
+                {children}
+                <Toaster />
+              </ChartProvider>
             </SidebarProvider>
           </div>
         </ThemeProvider>
