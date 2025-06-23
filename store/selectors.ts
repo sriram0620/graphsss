@@ -1,5 +1,6 @@
 import { createSelector } from 'reselect';
 import { RootState } from './index';
+import { DateRange } from 'react-day-picker';
 
 // Templates selectors
 export const selectTemplatesState = (state: RootState) => state.templates;
@@ -51,7 +52,7 @@ export const selectChartData = createSelector(
 
 export const selectChartLoading = createSelector(
   [selectKPIDataState, (state: RootState, chartId: string) => chartId],
-  (kpiDataState, chartId) => Boolean(kpiDataState.loading[chartId]) // Changed from Set.has to object property check
+  (kpiDataState, chartId) => Boolean(kpiDataState.loading[chartId])
 );
 
 export const selectChartError = createSelector(
@@ -61,7 +62,7 @@ export const selectChartError = createSelector(
 
 export const selectAllLoadingCharts = createSelector(
   [selectKPIDataState],
-  (kpiDataState) => Object.keys(kpiDataState.loading).filter(chartId => kpiDataState.loading[chartId]) // Changed from Array.from(Set) to Object.keys with filter
+  (kpiDataState) => Object.keys(kpiDataState.loading).filter(chartId => kpiDataState.loading[chartId])
 );
 
 export const selectCacheStats = createSelector(
@@ -80,10 +81,25 @@ export const selectCacheStats = createSelector(
   }
 );
 
-// UI selectors
+// UI selectors with date conversion
 export const selectGlobalDateRange = createSelector(
   [selectUIState],
-  (uiState) => uiState.globalDateRange
+  (uiState): DateRange | undefined => {
+    if (!uiState.globalDateRange) return undefined;
+    
+    try {
+      return {
+        from: uiState.globalDateRange.from ? new Date(uiState.globalDateRange.from) : undefined,
+        to: uiState.globalDateRange.to ? new Date(uiState.globalDateRange.to) : undefined
+      };
+    } catch (error) {
+      console.error('Error parsing date range:', error);
+      return {
+        from: new Date(new Date().setDate(new Date().getDate() - 7)),
+        to: new Date()
+      };
+    }
+  }
 );
 
 export const selectSelectedTheme = createSelector(

@@ -35,16 +35,33 @@ export function useKPIData({
   const fetchData = useCallback(() => {
     if (kpiIds.length === 0 || kpiInfo.length === 0) return;
 
-    const defaultDateRange = {
-      from: new Date(new Date().setDate(new Date().getDate() - 7)),
-      to: new Date()
-    };
+    // Validate and provide default date range
+    let validDateRange = dateRange;
+    if (!validDateRange?.from || !validDateRange?.to) {
+      validDateRange = {
+        from: new Date(new Date().setDate(new Date().getDate() - 7)),
+        to: new Date()
+      };
+    }
+
+    // Ensure dates are valid Date objects
+    const fromDate = validDateRange.from instanceof Date ? validDateRange.from : new Date(validDateRange.from);
+    const toDate = validDateRange.to instanceof Date ? validDateRange.to : new Date(validDateRange.to);
+
+    // Validate that dates are not invalid
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      console.error('Invalid date range provided to useKPIData');
+      return;
+    }
 
     dispatch(fetchKPIData({
       chartId,
       kpiIds,
       kpiInfo,
-      dateRange: dateRange || defaultDateRange
+      dateRange: {
+        from: fromDate,
+        to: toDate
+      }
     }));
   }, [dispatch, chartId, kpiIds, kpiInfo, dateRange]);
 

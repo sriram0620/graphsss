@@ -1,8 +1,13 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { DateRange } from 'react-day-picker';
+
+// Serializable date range interface
+interface SerializableDateRange {
+  from?: string; // ISO string instead of Date object
+  to?: string;   // ISO string instead of Date object
+}
 
 interface UIState {
-  globalDateRange: DateRange | undefined;
+  globalDateRange: SerializableDateRange | undefined;
   selectedTheme: string;
   resolution: string;
   autoRefresh: boolean;
@@ -13,8 +18,8 @@ interface UIState {
 
 const initialState: UIState = {
   globalDateRange: {
-    from: new Date(new Date().setDate(new Date().getDate() - 7)),
-    to: new Date()
+    from: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString(),
+    to: new Date().toISOString()
   },
   selectedTheme: 'default',
   resolution: 'auto',
@@ -28,7 +33,7 @@ const uiSlice = createSlice({
   name: 'ui',
   initialState,
   reducers: {
-    setGlobalDateRange: (state, action: PayloadAction<DateRange | undefined>) => {
+    setGlobalDateRange: (state, action: PayloadAction<SerializableDateRange | undefined>) => {
       state.globalDateRange = action.payload;
     },
     setSelectedTheme: (state, action: PayloadAction<string>) => {

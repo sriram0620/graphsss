@@ -105,10 +105,10 @@ export default function Dashboard() {
   };
 
   const handleDateRangeChange = (dateRange: DateRange | undefined) => {
-    // Ensure serializable date objects for Redux store
+    // Convert Date objects to ISO strings for Redux serialization
     const serializedDateRange = dateRange ? {
-      from: dateRange.from instanceof Date ? dateRange.from : undefined,
-      to: dateRange.to instanceof Date ? dateRange.to : undefined
+      from: dateRange.from?.toISOString(),
+      to: dateRange.to?.toISOString()
     } : undefined;
     
     dispatch(setGlobalDateRange(serializedDateRange));

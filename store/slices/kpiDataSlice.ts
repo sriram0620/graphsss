@@ -5,7 +5,7 @@ import { DataPoint } from '@/types';
 // Interfaces
 interface KPIDataState {
   data: Record<string, DataPoint[]>; // chartId -> data points
-  loading: Record<string, boolean>; // chart IDs currently loading (changed from Set to Record)
+  loading: Record<string, boolean>; // chart IDs currently loading
   errors: Record<string, string>; // chartId -> error message
   cache: Record<string, CachedKPIData>; // cache key -> cached data
   lastUpdated: Record<string, number>; // chartId -> timestamp
@@ -31,7 +31,7 @@ interface FetchKPIDataParams {
 // Initial state
 const initialState: KPIDataState = {
   data: {},
-  loading: {}, // Changed from Set to Record
+  loading: {},
   errors: {},
   cache: {},
   lastUpdated: {},
@@ -58,6 +58,11 @@ export const fetchKPIData = createAsyncThunk(
       const state = getState() as any;
       const cache = state.kpiData.cache;
 
+      // Validate date range
+      if (!dateRange.from || !dateRange.to) {
+        throw new Error('Invalid date range provided');
+      }
+
       const fromStr = dateRange.from.toISOString().slice(0, 19);
       const toStr = dateRange.to.toISOString().slice(0, 19);
 
@@ -65,45 +70,38 @@ export const fetchKPIData = createAsyncThunk(
 
       // Process each KPI
       for (const kpiId of kpiIds) {
-        // Determine KPI group
-        let kpiGroup = ApiService.getKPIGroup(kpiId, kpiInfo);
-        if (!kpiInfo.find(kpi => kpi.kpi_name === kpiId)) {
-          kpiGroup = await ApiService.getKPIGroupDynamic(kpiId);
+        try {
+          // Determine KPI group
+          let kpiGroup = ApiService.getKPIGroup(kpiId, kpiInfo);
+          if (!kpiInfo.find(kpi => kpi.kpi_name === kpiId)) {
+            kpiGroup = await ApiService.getKPIGroupDynamic(kpiId);
+          }
+
+          // Set appropriate aggregation based on KPI group
+          const kpiAggregation = aggregation || (kpiGroup === 'jobs' ? '10m' : '60s');
+          const cacheKey = getCacheKey(kpiId, fromStr, toStr, kpiAggregation);
+
+          // Check cache first
+          const cachedData = cache[cacheKey];
+          if (cachedData && !isDataStale(cachedData.timestamp)) {
+            allData.push(...cachedData.data);
+            continue;
+          }
+
+          // Fetch fresh data
+          const rawData = await ApiService.fetchKPIData(kpiId, kpiGroup, fromStr, toStr, kpiAggregation);
+          
+          const processedData: DataPoint[] = rawData.map((item: KPIData) => ({
+            date: item.timestamp,
+            category: kpiId,
+            value: item.kpi_value || item.job_count || 0
+          }));
+
+          allData.push(...processedData);
+        } catch (kpiError) {
+          console.error(`Error fetching data for KPI ${kpiId}:`, kpiError);
+          // Continue with other KPIs instead of failing the entire request
         }
-
-        // Set appropriate aggregation based on KPI group
-        const kpiAggregation = aggregation || (kpiGroup === 'jobs' ? '10m' : '60s');
-        const cacheKey = getCacheKey(kpiId, fromStr, toStr, kpiAggregation);
-
-        // Check cache first
-        const cachedData = cache[cacheKey];
-        if (cachedData && !isDataStale(cachedData.timestamp)) {
-          allData.push(...cachedData.data);
-          continue;
-        }
-
-        // Fetch fresh data
-        const rawData = await ApiService.fetchKPIData(kpiId, kpiGroup, fromStr, toStr, kpiAggregation);
-        
-        const processedData: DataPoint[] = rawData.map((item: KPIData) => ({
-          date: item.timestamp,
-          category: kpiId,
-          value: item.kpi_value || item.job_count || 0
-        }));
-
-        allData.push(...processedData);
-
-        // Cache the processed data
-        const cacheEntry: CachedKPIData = {
-          data: processedData,
-          timestamp: Date.now(),
-          expiresAt: Date.now() + CACHE_DURATION,
-        };
-
-        // Update cache in the next action
-        setTimeout(() => {
-          // This will be handled by the fulfilled case
-        }, 0);
       }
 
       return {
@@ -160,13 +158,13 @@ const kpiDataSlice = createSlice({
       delete state.data[chartId];
       delete state.errors[chartId];
       delete state.lastUpdated[chartId];
-      delete state.loading[chartId]; // Changed from Set.delete to object property deletion
+      delete state.loading[chartId];
     },
     clearAllKPIData: (state) => {
       state.data = {};
       state.errors = {};
       state.lastUpdated = {};
-      state.loading = {}; // Changed from Set.clear to empty object
+      state.loading = {};
     },
     invalidateCache: (state, action: PayloadAction<string | undefined>) => {
       const pattern = action.payload;
@@ -193,9 +191,9 @@ const kpiDataSlice = createSlice({
     setLoadingState: (state, action: PayloadAction<{ chartId: string; loading: boolean }>) => {
       const { chartId, loading } = action.payload;
       if (loading) {
-        state.loading[chartId] = true; // Changed from Set.add to object property assignment
+        state.loading[chartId] = true;
       } else {
-        delete state.loading[chartId]; // Changed from Set.delete to object property deletion
+        delete state.loading[chartId];
       }
     },
   },
@@ -203,13 +201,13 @@ const kpiDataSlice = createSlice({
     builder
       .addCase(fetchKPIData.pending, (state, action) => {
         const chartId = action.meta.arg.chartId;
-        state.loading[chartId] = true; // Changed from Set.add to object property assignment
+        state.loading[chartId] = true;
         delete state.errors[chartId];
       })
       .addCase(fetchKPIData.fulfilled, (state, action) => {
         const { chartId, data, cacheUpdates } = action.payload;
         
-        delete state.loading[chartId]; // Changed from Set.delete to object property deletion
+        delete state.loading[chartId];
         state.data[chartId] = data;
         state.lastUpdated[chartId] = Date.now();
         delete state.errors[chartId];
@@ -222,7 +220,7 @@ const kpiDataSlice = createSlice({
       .addCase(fetchKPIData.rejected, (state, action) => {
         const payload = action.payload as { chartId: string; error: string };
         
-        delete state.loading[payload.chartId]; // Changed from Set.delete to object property deletion
+        delete state.loading[payload.chartId];
         state.errors[payload.chartId] = payload.error;
       });
   },
