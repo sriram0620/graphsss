@@ -105,7 +105,13 @@ export default function Dashboard() {
   };
 
   const handleDateRangeChange = (dateRange: DateRange | undefined) => {
-    dispatch(setGlobalDateRange(dateRange));
+    // Ensure serializable date objects for Redux store
+    const serializedDateRange = dateRange ? {
+      from: dateRange.from instanceof Date ? dateRange.from : undefined,
+      to: dateRange.to instanceof Date ? dateRange.to : undefined
+    } : undefined;
+    
+    dispatch(setGlobalDateRange(serializedDateRange));
   };
 
   const handleThemeChange = (theme: string) => {
