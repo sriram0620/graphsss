@@ -47,8 +47,6 @@ export interface KPIInfo {
 const BASE_URL = "https://shwsckbvbt.a.pinggy.link";
 
 export class ApiService {
-  private static kpiInfoCache: Map<string, KPIInfo[]> = new Map();
-
   static async fetchTemplates(userId: string = "USER_TEST_1"): Promise<Template[]> {
     try {
       const response = await fetch(`${BASE_URL}/api/utl?userId=${userId}`);
@@ -75,48 +73,15 @@ export class ApiService {
     }
   }
 
-  static async fetchKPIInfoByGroup(kpiGroup: string): Promise<KPIInfo[]> {
+  static async fetchKPIInfo(): Promise<KPIInfo[]> {
     try {
-      // Check cache first
-      if (this.kpiInfoCache.has(kpiGroup)) {
-        return this.kpiInfoCache.get(kpiGroup)!;
-      }
-
-      const response = await fetch(`${BASE_URL}/api/kpi?kpi_grp=${kpiGroup.toUpperCase()}`);
+      const response = await fetch(`${BASE_URL}/api/kpis`);
       if (!response.ok) {
-        throw new Error(`Failed to fetch KPI info for group ${kpiGroup}: ${response.statusText}`);
+        throw new Error(`Failed to fetch KPI info: ${response.statusText}`);
       }
-      
-      const data = await response.json();
-      
-      // Transform the response to match our interface
-      const kpiInfo: KPIInfo[] = data.map((item: any) => ({
-        kpi_name: item.kpi_name,
-        kpi_group: kpiGroup.toLowerCase()
-      }));
-
-      // Cache the result
-      this.kpiInfoCache.set(kpiGroup, kpiInfo);
-      
-      return kpiInfo;
+      return await response.json();
     } catch (error) {
-      console.error(`Error fetching KPI info for group ${kpiGroup}:`, error);
-      throw error;
-    }
-  }
-
-  static async fetchAllKPIInfo(): Promise<KPIInfo[]> {
-    try {
-      // Fetch KPI info for both OS and Jobs groups
-      const [osKpis, jobKpis] = await Promise.all([
-        this.fetchKPIInfoByGroup('OS'),
-        this.fetchKPIInfoByGroup('JOBS')
-      ]);
-
-      // Combine both groups
-      return [...osKpis, ...jobKpis];
-    } catch (error) {
-      console.error('Error fetching all KPI info:', error);
+      console.error('Error fetching KPI info:', error);
       throw error;
     }
   }
@@ -173,36 +138,10 @@ export class ApiService {
     to: string,
     aggregation?: string
   ): Promise<KPIData[]> {
-    if (kpiGroup.toLowerCase() === 'jobs') {
+    if (kpiGroup === 'jobs') {
       return this.fetchJobKPIData(kpiName, from, to, aggregation || "10m");
     } else {
       return this.fetchOSKPIData(kpiName, from, to, aggregation || "60s");
-    }
-  }
-
-  // Helper method to get KPI group for a specific KPI name
-  static async getKPIGroupDynamic(kpiName: string): Promise<string> {
-    try {
-      // Try to find in OS KPIs first
-      const osKpis = await this.fetchKPIInfoByGroup('OS');
-      const osKpi = osKpis.find(kpi => kpi.kpi_name === kpiName);
-      if (osKpi) {
-        return 'os';
-      }
-
-      // Try to find in Jobs KPIs
-      const jobKpis = await this.fetchKPIInfoByGroup('JOBS');
-      const jobKpi = jobKpis.find(kpi => kpi.kpi_name === kpiName);
-      if (jobKpi) {
-        return 'jobs';
-      }
-
-      // Default to OS if not found
-      console.warn(`KPI ${kpiName} not found in any group, defaulting to OS`);
-      return 'os';
-    } catch (error) {
-      console.error(`Error determining KPI group for ${kpiName}:`, error);
-      return 'os'; // Default fallback
     }
   }
 }

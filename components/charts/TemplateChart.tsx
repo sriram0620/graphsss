@@ -87,35 +87,19 @@ export const TemplateChart: React.FC<TemplateChartProps> = ({
 
         // Fetch data for all KPIs
         const kpiDataPromises = allKpiIds.map(async (kpiId) => {
-          try {
-            // Determine KPI group dynamically
-            let kpiGroup = ApiService.getKPIGroup(kpiId, kpiInfo);
-            
-            // If not found in provided kpiInfo, fetch dynamically
-            if (!kpiInfo.find(kpi => kpi.kpi_name === kpiId)) {
-              kpiGroup = await ApiService.getKPIGroupDynamic(kpiId);
-            }
-
-            console.log(`Fetching data for KPI: ${kpiId}, Group: ${kpiGroup}`);
-            
-            const data = await ApiService.fetchKPIData(kpiId, kpiGroup, fromStr, toStr);
-            
-            return data.map((item: KPIData): DataPoint => ({
-              date: item.timestamp,
-              category: kpiId,
-              value: item.kpi_value || item.job_count || 0
-            }));
-          } catch (kpiError) {
-            console.error(`Error fetching data for KPI ${kpiId}:`, kpiError);
-            // Return empty array for failed KPI to prevent breaking the entire chart
-            return [];
-          }
+          const kpiGroup = ApiService.getKPIGroup(kpiId, kpiInfo);
+          const data = await ApiService.fetchKPIData(kpiId, kpiGroup, fromStr, toStr);
+          
+          return data.map((item: KPIData): DataPoint => ({
+            date: item.timestamp,
+            category: kpiId,
+            value: item.kpi_value || item.job_count || 0
+          }));
         });
 
         const allKpiData = await Promise.all(kpiDataPromises);
         const combinedData = allKpiData.flat();
         
-        console.log(`Fetched ${combinedData.length} data points for graph: ${graphName}`);
         setChartData(combinedData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch KPI data');
@@ -126,7 +110,7 @@ export const TemplateChart: React.FC<TemplateChartProps> = ({
     };
 
     fetchKPIData();
-  }, [allKpiIds, kpiInfo, dateRange, graphName]);
+  }, [allKpiIds, kpiInfo, dateRange]);
 
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
@@ -135,10 +119,7 @@ export const TemplateChart: React.FC<TemplateChartProps> = ({
   if (loading) {
     return (
       <Card className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto mb-2"></div>
-          <p className="text-sm text-muted-foreground">Loading {graphName}...</p>
-        </div>
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
       </Card>
     );
   }
@@ -149,9 +130,6 @@ export const TemplateChart: React.FC<TemplateChartProps> = ({
         <div className="text-center">
           <p className="text-destructive mb-2">Error loading chart</p>
           <p className="text-sm text-muted-foreground">{error}</p>
-          <p className="text-xs text-muted-foreground mt-2">
-            KPIs: {allKpiIds.join(', ')}
-          </p>
         </div>
       </Card>
     );
@@ -210,53 +188,35 @@ export const TemplateChart: React.FC<TemplateChartProps> = ({
 
           {/* Chart Content */}
           <div className="h-full pt-8 pb-12">
-            {chartData.length > 0 ? (
-              <ChartContainer
-                data={chartData}
-                type={localChartType}
-                title={graphName}
-                activeKPIs={activeKPIs}
-                kpiColors={kpiColors}
-                dateRange={dateRange}
-                theme={theme}
-                className="h-full"
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center">
-                  <p className="text-muted-foreground">No data available</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    KPIs: {allKpiIds.join(', ')}
-                  </p>
-                </div>
-              </div>
-            )}
+            <ChartContainer
+              data={chartData}
+              type={localChartType}
+              title={graphName}
+              activeKPIs={activeKPIs}
+              kpiColors={kpiColors}
+              dateRange={dateRange}
+              theme={theme}
+              className="h-full"
+            />
           </div>
 
           {/* KPI Parameters Footer */}
           <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-1 px-3 py-2 bg-card/95 backdrop-blur-sm border-t border-border/40">
-            {allKpiIds.map((kpiId) => {
-              const kpiGroup = ApiService.getKPIGroup(kpiId, kpiInfo) || 'unknown';
-              return (
+            {allKpiIds.map((kpiId) => (
+              <div
+                key={kpiId}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-accent/70 text-accent-foreground text-xs"
+                style={{ color: kpiColors[kpiId]?.color }}
+              >
                 <div
-                  key={kpiId}
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-accent/70 text-accent-foreground text-xs"
-                  style={{ color: kpiColors[kpiId]?.color }}
-                  title={`Group: ${kpiGroup.toUpperCase()}`}
-                >
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: kpiColors[kpiId]?.color }}
-                  />
-                  <span className="font-medium whitespace-nowrap">
-                    {kpiId.replace(/_/g, ' ').toUpperCase()}
-                  </span>
-                  <span className="text-[10px] opacity-60">
-                    ({kpiGroup.toUpperCase()})
-                  </span>
-                </div>
-              );
-            })}
+                  className="w-2 h-2 rounded-full"
+                  style={{ backgroundColor: kpiColors[kpiId]?.color }}
+                />
+                <span className="font-medium whitespace-nowrap">
+                  {kpiId.replace(/_/g, ' ').toUpperCase()}
+                </span>
+              </div>
+            ))}
           </div>
         </Card>
       </motion.div>

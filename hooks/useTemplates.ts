@@ -26,8 +26,8 @@ export function useTemplates() {
         setLoading(true);
         setError(null);
 
-        // Fetch all KPI info (both OS and Jobs)
-        const kpiInfoData = await ApiService.fetchAllKPIInfo();
+        // Fetch KPI info first
+        const kpiInfoData = await ApiService.fetchKPIInfo();
         setKpiInfo(kpiInfoData);
 
         // Fetch templates

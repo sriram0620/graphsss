@@ -13,10 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { useTemplates } from "@/hooks/useTemplates"
 import { TemplateDynamicLayout } from "@/components/charts/TemplateDynamicLayout"
-import { useChart } from "@/contexts/chart-context"
-import { Button } from "@/components/ui/button"
-import { RefreshCw, Settings } from "lucide-react"
-import { Switch } from "@/components/ui/switch"
 
 const chartThemes = {
   default: {
@@ -67,33 +63,9 @@ export default function Dashboard() {
     selectTemplate,
   } = useTemplates();
 
-  const { state, updateGlobalSettings, invalidateCache } = useChart();
-
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Update global chart settings when controls change
-  useEffect(() => {
-    updateGlobalSettings({
-      dateRange: globalDateRange,
-      theme: selectedTheme,
-      resolution: resolution,
-    });
-  }, [globalDateRange, selectedTheme, resolution, updateGlobalSettings]);
-
-  const handleRefreshAll = () => {
-    invalidateCache();
-    // Force re-fetch of current template
-    if (selectedTemplate && templateDetail) {
-      // This will trigger a re-fetch in the chart components
-      updateGlobalSettings({ dateRange: globalDateRange });
-    }
-  };
-
-  const handleAutoRefreshToggle = (enabled: boolean) => {
-    updateGlobalSettings({ autoRefresh: enabled });
-  };
 
   if (!mounted) {
     return (
@@ -230,23 +202,6 @@ export default function Dashboard() {
                     ))}
                   </SelectContent>
                 </Select>
-
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={state.globalSettings.autoRefresh}
-                    onCheckedChange={handleAutoRefreshToggle}
-                  />
-                  <span className="text-sm text-muted-foreground">Auto Refresh</span>
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleRefreshAll}
-                  title="Refresh All Charts"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
               </div>
             </motion.div>
           </div>
