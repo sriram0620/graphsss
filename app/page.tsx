@@ -12,7 +12,27 @@ import { useSidebar } from "@/contexts/sidebar-context"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useTemplates } from "@/hooks/useTemplates"
-import { TemplateDynamicLayout } from "@/components/charts/TemplateDynamicLayout"
+import { ReduxTemplateDynamicLayout } from "@/components/charts/ReduxTemplateDynamicLayout"
+import { Button } from "@/components/ui/button"
+import { RefreshCw, Settings } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { useAppDispatch, useAppSelector } from "@/store/hooks"
+import { 
+  setGlobalDateRange, 
+  setSelectedTheme, 
+  setResolution, 
+  setAutoRefresh 
+} from "@/store/slices/uiSlice"
+import { invalidateCache, cleanExpiredCache } from "@/store/slices/kpiDataSlice"
+import {
+  selectGlobalDateRange,
+  selectSelectedTheme,
+  selectResolution,
+  selectAutoRefresh,
+  selectTemplateStats,
+  selectAllLoadingCharts,
+  selectCacheStats
+} from "@/store/selectors"
 
 const chartThemes = {
   default: {
@@ -44,14 +64,18 @@ const resolutionOptions = [
 
 export default function Dashboard() {
   const [mounted, setMounted] = useState(false);
-  const [globalDateRange, setGlobalDateRange] = useState<DateRange | undefined>({
-    from: new Date(new Date().setDate(new Date().getDate() - 7)),
-    to: new Date()
-  });
   const { theme } = useTheme();
   const { isExpanded } = useSidebar();
-  const [resolution, setResolution] = useState('auto');
-  const [selectedTheme, setSelectedTheme] = useState('default');
+  
+  // Redux hooks
+  const dispatch = useAppDispatch();
+  const globalDateRange = useAppSelector(selectGlobalDateRange);
+  const selectedTheme = useAppSelector(selectSelectedTheme);
+  const resolution = useAppSelector(selectResolution);
+  const autoRefresh = useAppSelector(selectAutoRefresh);
+  const templateStats = useAppSelector(selectTemplateStats);
+  const loadingCharts = useAppSelector(selectAllLoadingCharts);
+  const cacheStats = useAppSelector(selectCacheStats);
 
   const {
     templates,
@@ -66,6 +90,35 @@ export default function Dashboard() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Clean expired cache periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      dispatch(cleanExpiredCache());
+    }, 60000); // Clean every minute
+
+    return () => clearInterval(interval);
+  }, [dispatch]);
+
+  const handleRefreshAll = () => {
+    dispatch(invalidateCache());
+  };
+
+  const handleDateRangeChange = (dateRange: DateRange | undefined) => {
+    dispatch(setGlobalDateRange(dateRange));
+  };
+
+  const handleThemeChange = (theme: string) => {
+    dispatch(setSelectedTheme(theme));
+  };
+
+  const handleResolutionChange = (resolution: string) => {
+    dispatch(setResolution(resolution));
+  };
+
+  const handleAutoRefreshToggle = (enabled: boolean) => {
+    dispatch(setAutoRefresh(enabled));
+  };
 
   if (!mounted) {
     return (
@@ -158,7 +211,7 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
 
-              <Select value={selectedTheme} onValueChange={setSelectedTheme}>
+              <Select value={selectedTheme} onValueChange={handleThemeChange}>
                 <SelectTrigger className="w-[180px] h-9">
                   <SelectValue placeholder="Select theme" />
                 </SelectTrigger>
@@ -185,12 +238,12 @@ export default function Dashboard() {
               <div className="flex items-center gap-4">
                 <DateRangePicker
                   date={globalDateRange}
-                  onDateChange={setGlobalDateRange}
+                  onDateChange={handleDateRangeChange}
                   className="w-[280px]"
                   showTime
                 />
 
-                <Select value={resolution} onValueChange={setResolution}>
+                <Select value={resolution} onValueChange={handleResolutionChange}>
                   <SelectTrigger className="w-[140px] h-9">
                     <SelectValue placeholder="Resolution" />
                   </SelectTrigger>
@@ -202,12 +255,30 @@ export default function Dashboard() {
                     ))}
                   </SelectContent>
                 </Select>
+
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={autoRefresh}
+                    onCheckedChange={handleAutoRefreshToggle}
+                  />
+                  <span className="text-sm text-muted-foreground">Auto Refresh</span>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleRefreshAll}
+                  title="Refresh All Charts"
+                  disabled={loadingCharts.length > 0}
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingCharts.length > 0 ? 'animate-spin' : ''}`} />
+                </Button>
               </div>
             </motion.div>
           </div>
 
           {/* Template Stats */}
-          {templateDetail && (
+          {templateStats && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -221,7 +292,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Total Graphs</p>
-                    <h3 className="text-2xl font-bold">{templateDetail.graphs.length}</h3>
+                    <h3 className="text-2xl font-bold">{templateStats.totalGraphs}</h3>
                   </div>
                 </div>
               </Card>
@@ -233,7 +304,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Systems</p>
-                    <h3 className="text-2xl font-bold">{templateDetail.systems.length}</h3>
+                    <h3 className="text-2xl font-bold">{templateStats.totalSystems}</h3>
                   </div>
                 </div>
               </Card>
@@ -245,7 +316,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Resolution</p>
-                    <h3 className="text-lg font-bold">{templateDetail.resolution}</h3>
+                    <h3 className="text-lg font-bold">{templateStats.resolution}</h3>
                   </div>
                 </div>
               </Card>
@@ -256,8 +327,8 @@ export default function Dashboard() {
                     <DollarSign className="w-6 h-6 text-orange-500" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Frequency</p>
-                    <h3 className="text-lg font-bold">{templateDetail.frequency}</h3>
+                    <p className="text-sm text-muted-foreground">Cache</p>
+                    <h3 className="text-lg font-bold">{cacheStats.active}/{cacheStats.total}</h3>
                   </div>
                 </div>
               </Card>
@@ -272,7 +343,7 @@ export default function Dashboard() {
             className="grid gap-6"
           >
             {templateDetail ? (
-              <TemplateDynamicLayout
+              <ReduxTemplateDynamicLayout
                 templateDetail={templateDetail}
                 kpiInfo={kpiInfo}
                 dateRange={globalDateRange}

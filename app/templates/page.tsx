@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Plus, Search, Star, StarOff, Heart, Shield } from "lucide-react"
+import { Search, Star, Shield, Heart } from "lucide-react"
 import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
