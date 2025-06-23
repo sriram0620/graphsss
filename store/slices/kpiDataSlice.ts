@@ -5,7 +5,7 @@ import { DataPoint } from '@/types';
 // Interfaces
 interface KPIDataState {
   data: Record<string, DataPoint[]>; // chartId -> data points
-  loading: Set<string>; // chart IDs currently loading
+  loading: Record<string, boolean>; // chart IDs currently loading (changed from Set to Record)
   errors: Record<string, string>; // chartId -> error message
   cache: Record<string, CachedKPIData>; // cache key -> cached data
   lastUpdated: Record<string, number>; // chartId -> timestamp
@@ -31,7 +31,7 @@ interface FetchKPIDataParams {
 // Initial state
 const initialState: KPIDataState = {
   data: {},
-  loading: new Set(),
+  loading: {}, // Changed from Set to Record
   errors: {},
   cache: {},
   lastUpdated: {},
@@ -160,13 +160,13 @@ const kpiDataSlice = createSlice({
       delete state.data[chartId];
       delete state.errors[chartId];
       delete state.lastUpdated[chartId];
-      state.loading.delete(chartId);
+      delete state.loading[chartId]; // Changed from Set.delete to object property deletion
     },
     clearAllKPIData: (state) => {
       state.data = {};
       state.errors = {};
       state.lastUpdated = {};
-      state.loading.clear();
+      state.loading = {}; // Changed from Set.clear to empty object
     },
     invalidateCache: (state, action: PayloadAction<string | undefined>) => {
       const pattern = action.payload;
@@ -193,9 +193,9 @@ const kpiDataSlice = createSlice({
     setLoadingState: (state, action: PayloadAction<{ chartId: string; loading: boolean }>) => {
       const { chartId, loading } = action.payload;
       if (loading) {
-        state.loading.add(chartId);
+        state.loading[chartId] = true; // Changed from Set.add to object property assignment
       } else {
-        state.loading.delete(chartId);
+        delete state.loading[chartId]; // Changed from Set.delete to object property deletion
       }
     },
   },
@@ -203,13 +203,13 @@ const kpiDataSlice = createSlice({
     builder
       .addCase(fetchKPIData.pending, (state, action) => {
         const chartId = action.meta.arg.chartId;
-        state.loading.add(chartId);
+        state.loading[chartId] = true; // Changed from Set.add to object property assignment
         delete state.errors[chartId];
       })
       .addCase(fetchKPIData.fulfilled, (state, action) => {
         const { chartId, data, cacheUpdates } = action.payload;
         
-        state.loading.delete(chartId);
+        delete state.loading[chartId]; // Changed from Set.delete to object property deletion
         state.data[chartId] = data;
         state.lastUpdated[chartId] = Date.now();
         delete state.errors[chartId];
@@ -222,7 +222,7 @@ const kpiDataSlice = createSlice({
       .addCase(fetchKPIData.rejected, (state, action) => {
         const payload = action.payload as { chartId: string; error: string };
         
-        state.loading.delete(payload.chartId);
+        delete state.loading[payload.chartId]; // Changed from Set.delete to object property deletion
         state.errors[payload.chartId] = payload.error;
       });
   },

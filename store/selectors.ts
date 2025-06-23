@@ -51,7 +51,7 @@ export const selectChartData = createSelector(
 
 export const selectChartLoading = createSelector(
   [selectKPIDataState, (state: RootState, chartId: string) => chartId],
-  (kpiDataState, chartId) => kpiDataState.loading.has(chartId)
+  (kpiDataState, chartId) => Boolean(kpiDataState.loading[chartId]) // Changed from Set.has to object property check
 );
 
 export const selectChartError = createSelector(
@@ -61,7 +61,7 @@ export const selectChartError = createSelector(
 
 export const selectAllLoadingCharts = createSelector(
   [selectKPIDataState],
-  (kpiDataState) => Array.from(kpiDataState.loading)
+  (kpiDataState) => Object.keys(kpiDataState.loading).filter(chartId => kpiDataState.loading[chartId]) // Changed from Array.from(Set) to Object.keys with filter
 );
 
 export const selectCacheStats = createSelector(

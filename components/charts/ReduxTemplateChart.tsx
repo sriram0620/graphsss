@@ -44,9 +44,9 @@ export const ReduxTemplateChart: React.FC<ReduxTemplateChartProps> = ({
   // Get auto-refresh setting from Redux
   const autoRefresh = useAppSelector(selectAutoRefresh);
 
-  // Get all KPI IDs (primary + secondary)
+  // Get all KPI IDs (primary + secondary) - handle undefined secondaryKpis
   const allKpiIds = useMemo(() => {
-    return [primaryKpiId, ...secondaryKpis.map(kpi => kpi.kpi_id)];
+    return [primaryKpiId, ...(secondaryKpis || []).map(kpi => kpi.kpi_id)]; // Added null check with fallback to empty array
   }, [primaryKpiId, secondaryKpis]);
 
   // Get active KPIs set
